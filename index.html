@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Consultor de Precios con Escáner</title>
+    <title>Consultor de Precios Pro</title>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     
     <style>
@@ -65,10 +65,14 @@
         }
 
         /* Buscador y Botón Escáner */
+        .search-container {
+            position: relative; /* Necesario para posicionar la lista desplegable */
+            margin-bottom: 1.5rem;
+        }
+
         .input-group {
             display: flex;
             gap: 10px;
-            margin-bottom: 1.5rem;
         }
 
         input[type="text"] {
@@ -95,11 +99,47 @@
             justify-content: center;
         }
 
+        /* Lista de Sugerencias (Desplegable) */
+        .suggestions-list {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: 250px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: none; /* Oculto por defecto */
+        }
+
+        .suggestion-item {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .suggestion-item:hover {
+            background-color: #f9fafb;
+        }
+
+        .sug-desc { font-weight: 500; color: #333; }
+        .sug-code { font-size: 0.8rem; color: #888; margin-left: 10px; }
+
         /* Área de cámara */
         #reader {
             width: 100%;
             margin-bottom: 1.5rem;
-            display: none; /* Oculto por defecto */
+            display: none;
             border-radius: 8px;
             overflow: hidden;
             background: black;
@@ -174,7 +214,6 @@
             margin-bottom: 10px;
         }
 
-        /* Ajuste para el botón de detener cámara */
         #html5-qrcode-button-camera-stop {
             margin-top: 10px;
             padding: 5px 15px;
@@ -205,9 +244,12 @@
 
     <div id="reader"></div>
 
-    <div class="input-group">
-        <input type="text" id="searchInput" placeholder="Escribe el código..." inputmode="numeric">
-        <button class="btn-scan" id="btnScan" title="Escanear con cámara">📷</button>
+    <div class="search-container">
+        <div class="input-group">
+            <input type="text" id="searchInput" placeholder="Escribe nombre o código..." autocomplete="off">
+            <button class="btn-scan" id="btnScan" title="Escanear con cámara">📷</button>
+        </div>
+        <ul id="suggestionsList" class="suggestions-list"></ul>
     </div>
 
     <div id="resultCard" class="result-card">
@@ -234,13 +276,14 @@
 
     const fileInput = document.getElementById('csvFileInput');
     const searchInput = document.getElementById('searchInput');
+    const suggestionsList = document.getElementById('suggestionsList');
     const resultCard = document.getElementById('resultCard');
     const errorMsg = document.getElementById('errorMsg');
     const dbStatus = document.getElementById('dbStatus');
     const btnScan = document.getElementById('btnScan');
     const readerDiv = document.getElementById('reader');
 
-    // Cargar datos guardados
+    // Cargar datos al iniciar
     window.onload = function() {
         const savedData = localStorage.getItem('inventoryData');
         if (savedData) {
@@ -258,8 +301,7 @@
         
         const reader = new FileReader();
         reader.onload = function(e) {
-            const text = e.target.result;
-            parseCSV(text);
+            parseCSV(e.target.result);
         };
         reader.readAsText(file, 'ISO-8859-1');
     });
@@ -267,18 +309,18 @@
     function parseCSV(csvText) {
         const lines = csvText.split(/\r\n|\n/);
         const newInventory = [];
-
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
             const parts = line.split(',');
             if (parts.length >= 4) {
-                // Se asume que el Código es la columna 0
                 newInventory.push({ 
                     code: parts[0].trim(), 
                     desc: parts[1].trim(), 
                     cost: parts[2].trim(), 
-                    sale: parts[3].trim() 
+                    sale: parts[3].trim(),
+                    // Guardamos una versión en minúsculas para buscar más rápido
+                    searchStr: (parts[1] + ' ' + parts[0]).toLowerCase()
                 });
             }
         }
@@ -293,59 +335,106 @@
         }
     }
 
-    // Lógica del Buscador
-    function searchProduct(query) {
-        if (!query || query.length < 3) {
+    // --- Lógica de Búsqueda y Sugerencias ---
+
+    searchInput.addEventListener('input', function() {
+        const query = this.value.trim().toLowerCase();
+        
+        // Si está vacío o muy corto, ocultar todo
+        if (query.length < 2) {
+            suggestionsList.style.display = 'none';
             resultCard.style.display = 'none';
             errorMsg.style.display = 'none';
             return;
         }
 
-        const product = inventory.find(item => item.code === query);
+        // 1. Verificar si es un código exacto (prioridad escáner)
+        const exactMatch = inventory.find(item => item.code === query);
+        if (exactMatch) {
+            showResult(exactMatch);
+            suggestionsList.style.display = 'none'; // Ocultar sugerencias si ya encontramos el código
+            return;
+        }
+
+        // 2. Si no es exacto, buscar coincidencias en descripción o código parcial
+        const matches = inventory.filter(item => item.searchStr.includes(query)).slice(0, 10); // Máximo 10 resultados
+
+        renderSuggestions(matches);
+    });
+
+    function renderSuggestions(matches) {
+        suggestionsList.innerHTML = '';
         
-        if (product) {
-            document.getElementById('resDesc').textContent = product.desc;
-            document.getElementById('resCost').textContent = product.cost;
-            document.getElementById('resSale').textContent = product.sale;
-            resultCard.style.display = 'block';
+        if (matches.length > 0) {
+            matches.forEach(product => {
+                const li = document.createElement('li');
+                li.className = 'suggestion-item';
+                li.innerHTML = `
+                    <span class="sug-desc">${product.desc}</span>
+                    <span class="sug-code">#${product.code}</span>
+                `;
+                li.onclick = () => {
+                    showResult(product);
+                    suggestionsList.style.display = 'none';
+                    searchInput.value = product.desc; // Poner nombre en el input
+                };
+                suggestionsList.appendChild(li);
+            });
+            suggestionsList.style.display = 'block';
             errorMsg.style.display = 'none';
-            
-            // Si encontramos producto y estamos escaneando, detenemos el escáner para ver el resultado
-            if (isScanning) {
-                stopScanner();
-            }
         } else {
-            resultCard.style.display = 'none';
-            errorMsg.style.display = 'block';
+            suggestionsList.style.display = 'none';
+            // Solo mostrar error si hemos escrito bastante y no hay nada
+            if (searchInput.value.length > 3) {
+                resultCard.style.display = 'none';
+                errorMsg.style.display = 'block';
+            }
         }
     }
 
-    searchInput.addEventListener('input', (e) => searchProduct(e.target.value.trim()));
+    function showResult(product) {
+        document.getElementById('resDesc').textContent = product.desc;
+        document.getElementById('resCost').textContent = product.cost;
+        document.getElementById('resSale').textContent = product.sale;
+        resultCard.style.display = 'block';
+        errorMsg.style.display = 'none';
+        
+        if (isScanning) stopScanner();
+    }
 
-    // Lógica del Escáner
-    btnScan.addEventListener('click', function() {
-        if (isScanning) {
-            stopScanner();
-        } else {
-            startScanner();
+    // Manejo de tecla Enter (común en lectores de código)
+    searchInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            // Si hay sugerencias visibles y apretamos enter, seleccionar la primera
+            if (suggestionsList.style.display === 'block' && suggestionsList.firstChild) {
+                suggestionsList.firstChild.click();
+            }
+            this.select(); 
         }
+    });
+
+    // --- Lógica de Escáner (Cámara) ---
+    btnScan.addEventListener('click', function() {
+        if (isScanning) stopScanner();
+        else startScanner();
     });
 
     function startScanner() {
         readerDiv.style.display = 'block';
         isScanning = true;
-        btnScan.textContent = '❌'; // Botón para cancelar
+        btnScan.textContent = '❌';
         btnScan.style.backgroundColor = '#dc2626';
 
         html5QrcodeScanner = new Html5Qrcode("reader");
-        
         const config = { fps: 10, qrbox: { width: 250, height: 250 } };
         
-        // Preferir cámara trasera
-        html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess)
-        .catch(err => {
-            console.log("Error al iniciar cámara", err);
-            alert("No se pudo iniciar la cámara. Asegúrate de dar permisos y usar HTTPS o Localhost.");
+        html5QrcodeScanner.start({ facingMode: "environment" }, config, (decodedText) => {
+            searchInput.value = decodedText;
+            // Disparar evento de input manualmente para activar la búsqueda
+            searchInput.dispatchEvent(new Event('input'));
+        }).catch(err => {
+            alert("Error al iniciar cámara. Verifica permisos y HTTPS.");
             stopScanner();
         });
     }
@@ -355,23 +444,19 @@
             html5QrcodeScanner.stop().then(() => {
                 readerDiv.style.display = 'none';
                 html5QrcodeScanner.clear();
-            }).catch(err => console.log(err));
-        } else {
-            readerDiv.style.display = 'none';
+            }).catch(console.error);
         }
-        
         isScanning = false;
         btnScan.textContent = '📷';
         btnScan.style.backgroundColor = 'var(--primary-color)';
     }
 
-    function onScanSuccess(decodedText, decodedResult) {
-        // Reproducir sonido beep (opcional y simple)
-        // const audio = new Audio('beep.mp3'); audio.play().catch(e=>{});
-        
-        searchInput.value = decodedText;
-        searchProduct(decodedText);
-    }
+    // Cerrar sugerencias si hago click fuera
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !suggestionsList.contains(e.target)) {
+            suggestionsList.style.display = 'none';
+        }
+    });
 
 </script>
 
