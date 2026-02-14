@@ -335,7 +335,9 @@
         }
     }
 
-    // --- Lógica de Búsqueda y Sugerencias ---
+  // --- Lógica de Búsqueda y Sugerencias (MEJORADA) ---
+
+    const MAX_RESULTS = 50; // Límite de seguridad para no congelar el celular
 
     searchInput.addEventListener('input', function() {
         const query = this.value.trim().toLowerCase();
@@ -348,27 +350,33 @@
             return;
         }
 
-        // 1. Verificar si es un código exacto (prioridad escáner)
+        // 1. Verificar si es un código exacto (prioridad máxima)
         const exactMatch = inventory.find(item => item.code === query);
         if (exactMatch) {
             showResult(exactMatch);
-            suggestionsList.style.display = 'none'; // Ocultar sugerencias si ya encontramos el código
+            suggestionsList.style.display = 'none'; 
             return;
         }
 
-        // 2. Si no es exacto, buscar coincidencias en descripción o código parcial
-        const matches = inventory.filter(item => item.searchStr.includes(query)).slice(0, 10); // Máximo 10 resultados
+        // 2. Buscar coincidencias
+        // Filtramos todos los que coincidan
+        const allMatches = inventory.filter(item => item.searchStr.includes(query));
+        
+        // Cortamos la lista para mostrar solo los primeros 50 (seguridad)
+        const visibleMatches = allMatches.slice(0, MAX_RESULTS);
 
-        renderSuggestions(matches);
+        renderSuggestions(visibleMatches, allMatches.length);
     });
 
-    function renderSuggestions(matches) {
+    function renderSuggestions(matches, totalFound) {
         suggestionsList.innerHTML = '';
         
         if (matches.length > 0) {
             matches.forEach(product => {
                 const li = document.createElement('li');
                 li.className = 'suggestion-item';
+                // Resaltamos en negrita la parte que coincide no es fácil sin HTML complejo, 
+                // así que dejamos el formato simple pero limpio.
                 li.innerHTML = `
                     <span class="sug-desc">${product.desc}</span>
                     <span class="sug-code">#${product.code}</span>
@@ -376,22 +384,34 @@
                 li.onclick = () => {
                     showResult(product);
                     suggestionsList.style.display = 'none';
-                    searchInput.value = product.desc; // Poner nombre en el input
+                    searchInput.value = product.desc; 
                 };
                 suggestionsList.appendChild(li);
             });
+
+            // AVISO SI HAY MÁS RESULTADOS
+            if (totalFound > matches.length) {
+                const remaining = totalFound - matches.length;
+                const infoLi = document.createElement('li');
+                infoLi.style.padding = '10px';
+                infoLi.style.textAlign = 'center';
+                infoLi.style.color = '#dc2626';
+                infoLi.style.fontStyle = 'italic';
+                infoLi.style.backgroundColor = '#fef2f2';
+                infoLi.textContent = `⚠️ Hay ${remaining} resultados más. Sigue escribiendo para filtrar.`;
+                suggestionsList.appendChild(infoLi);
+            }
+
             suggestionsList.style.display = 'block';
             errorMsg.style.display = 'none';
         } else {
             suggestionsList.style.display = 'none';
-            // Solo mostrar error si hemos escrito bastante y no hay nada
             if (searchInput.value.length > 3) {
                 resultCard.style.display = 'none';
                 errorMsg.style.display = 'block';
             }
         }
     }
-
     function showResult(product) {
         document.getElementById('resDesc').textContent = product.desc;
         document.getElementById('resCost').textContent = product.cost;
