@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Consultor de Precios con Escáner</title>
+    <title>Escáner de Precios al Público</title>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     
     <style>
         :root {
-            --primary-color: #2563eb;
-            --bg-color: #f3f4f6;
+            --primary-color: #0ea5e9;
+            --bg-color: #f0fdfa;
             --card-bg: #ffffff;
-            --text-color: #1f2937;
-            --accent-green: #059669;
+            --text-color: #0f172a;
+            --price-color: #059669;
         }
 
         body {
@@ -29,29 +29,29 @@
 
         .container {
             width: 100%;
-            max-width: 600px;
+            max-width: 500px;
             background: var(--card-bg);
             padding: 2rem;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border-radius: 16px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
         }
 
         h1 {
             text-align: center;
             color: var(--primary-color);
-            margin-bottom: 1rem;
-            font-size: 1.5rem;
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            font-size: 1.8rem;
         }
 
         /* Sección de carga de archivo */
         .upload-section {
-            background: #e0e7ff;
-            padding: 0.8rem;
+            background: #e0f2fe;
+            padding: 1rem;
             border-radius: 8px;
-            border: 2px dashed #a5b4fc;
+            border: 2px dashed #7dd3fc;
             text-align: center;
             margin-bottom: 1.5rem;
-            font-size: 0.9rem;
         }
 
         input[type="file"] { display: none; }
@@ -59,12 +59,12 @@
         .file-label {
             cursor: pointer;
             font-weight: bold;
-            color: var(--primary-color);
+            color: #0284c7;
             padding: 5px 10px;
             display: inline-block;
         }
 
-        /* Buscador y Botón Escáner */
+        /* Controles de búsqueda */
         .input-group {
             display: flex;
             gap: 10px;
@@ -73,11 +73,12 @@
 
         input[type="text"] {
             flex: 1;
-            padding: 12px;
-            font-size: 1.1rem;
-            border: 2px solid #e5e7eb;
+            padding: 15px;
+            font-size: 1.2rem;
+            border: 2px solid #e2e8f0;
             border-radius: 8px;
             outline: none;
+            text-align: center;
         }
 
         input[type="text"]:focus { border-color: var(--primary-color); }
@@ -86,68 +87,58 @@
             background-color: var(--primary-color);
             color: white;
             border: none;
-            padding: 0 15px;
+            padding: 0 20px;
             border-radius: 8px;
             font-size: 1.5rem;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
+            transition: background-color 0.2s;
         }
+        
+        .btn-scan:active { background-color: #0284c7; }
 
         /* Área de cámara */
         #reader {
             width: 100%;
             margin-bottom: 1.5rem;
-            display: none; /* Oculto por defecto */
+            display: none;
             border-radius: 8px;
             overflow: hidden;
-            background: black;
+            background: #000;
         }
 
-        /* Resultados */
+        /* Tarjeta de Resultados (Solo Descripción y Venta) */
         .result-card {
             display: none;
-            background: #fff;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 1.5rem;
+            background: #ecfdf5;
+            border: 2px solid #34d399;
+            border-radius: 12px;
+            padding: 2rem 1.5rem;
             text-align: center;
-            animation: fadeIn 0.3s ease-in;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
 
         .product-desc {
-            font-size: 1.25rem;
-            font-weight: bold;
+            font-size: 1.4rem;
+            font-weight: 700;
             margin-bottom: 1rem;
-            color: #111827;
+            color: #064e3b;
+            text-transform: uppercase;
         }
 
-        .price-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-        }
-
-        .price-item {
+        .sale-price-container {
+            background: #fff;
             padding: 1rem;
             border-radius: 8px;
-        }
-
-        .cost-price {
-            background-color: #fee2e2;
-            color: #991b1b;
-        }
-
-        .sale-price {
-            background-color: #d1fae5;
-            color: #065f46;
-            border: 2px solid #059669;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
         }
 
         .price-label {
             display: block;
-            font-size: 0.75rem;
+            font-size: 0.9rem;
+            color: #64748b;
             text-transform: uppercase;
             font-weight: bold;
             margin-bottom: 5px;
@@ -155,12 +146,17 @@
 
         .price-value {
             display: block;
-            font-size: 1.4rem;
-            font-weight: bold;
+            font-size: 2.5rem;
+            font-weight: 900;
+            color: var(--price-color);
         }
 
         .error-msg {
+            background: #fef2f2;
             color: #dc2626;
+            border: 1px solid #fecaca;
+            padding: 1rem;
+            border-radius: 8px;
             text-align: center;
             font-weight: bold;
             margin-top: 1rem;
@@ -168,63 +164,59 @@
         }
 
         .db-status {
-            font-size: 0.8rem;
-            color: #6b7280;
+            font-size: 0.85rem;
+            color: #64748b;
             text-align: center;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
+            font-weight: 500;
         }
 
-        /* Ajuste para el botón de detener cámara */
+        /* Botón detener cámara de la librería */
         #html5-qrcode-button-camera-stop {
             margin-top: 10px;
-            padding: 5px 15px;
-            background: #dc2626;
+            padding: 8px 16px;
+            background: #ef4444;
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 6px;
+            font-weight: bold;
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+        @keyframes popIn {
+            0% { opacity: 0; transform: scale(0.9); }
+            100% { opacity: 1; transform: scale(1); }
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>Consultor de Precios</h1>
+    <h1>Verificador de Precios</h1>
 
-    <div class="db-status" id="dbStatus">No hay datos cargados.</div>
+    <div class="db-status" id="dbStatus">Esperando base de datos...</div>
 
     <div class="upload-section">
-        <label for="csvFileInput" class="file-label">📂 Cargar / Actualizar CSV</label>
+        <label for="csvFileInput" class="file-label">📥 Cargar archivo CSV de Inventario</label>
         <input type="file" id="csvFileInput" accept=".csv">
-        <div id="file-name-display" style="margin-top:5px; font-size:0.8rem;"></div>
+        <div id="file-name-display" style="margin-top:8px; font-size:0.85rem; color:#0369a1;"></div>
     </div>
 
     <div id="reader"></div>
 
     <div class="input-group">
-        <input type="text" id="searchInput" placeholder="Escribe el código..." inputmode="numeric">
-        <button class="btn-scan" id="btnScan" title="Escanear con cámara">📷</button>
+        <input type="text" id="searchInput" placeholder="Escanear o teclear código..." inputmode="numeric" autocomplete="off">
+        <button class="btn-scan" id="btnScan" title="Activar Cámara">📷</button>
     </div>
 
     <div id="resultCard" class="result-card">
-        <div class="product-desc" id="resDesc">...</div>
-        <div class="price-grid">
-            <div class="price-item cost-price">
-                <span class="price-label">Costo</span>
-                <span class="price-value" id="resCost">$0.00</span>
-            </div>
-            <div class="price-item sale-price">
-                <span class="price-label">Público</span>
-                <span class="price-value" id="resSale">$0.00</span>
-            </div>
+        <div class="product-desc" id="resDesc">Nombre del Producto</div>
+        <div class="sale-price-container">
+            <span class="price-label">Precio al Público</span>
+            <span class="price-value" id="resSale">$0.00</span>
         </div>
     </div>
 
-    <div id="errorMsg" class="error-msg">Producto no encontrado</div>
+    <div id="errorMsg" class="error-msg">⚠️ Código no encontrado en la base de datos</div>
 </div>
 
 <script>
@@ -232,6 +224,7 @@
     let html5QrcodeScanner = null;
     let isScanning = false;
 
+    // Referencias al DOM
     const fileInput = document.getElementById('csvFileInput');
     const searchInput = document.getElementById('searchInput');
     const resultCard = document.getElementById('resultCard');
@@ -240,16 +233,17 @@
     const btnScan = document.getElementById('btnScan');
     const readerDiv = document.getElementById('reader');
 
-    // Cargar datos guardados
+    // 1. Cargar datos guardados previamente en el navegador
     window.onload = function() {
-        const savedData = localStorage.getItem('inventoryData');
+        const savedData = localStorage.getItem('inventoryApp_Data');
         if (savedData) {
             inventory = JSON.parse(savedData);
-            dbStatus.textContent = `✅ Listo: ${inventory.length} productos cargados.`;
+            dbStatus.textContent = `✅ Base de datos lista (${inventory.length} artículos)`;
+            searchInput.focus();
         }
     };
 
-    // Procesar archivo CSV
+    // 2. Procesar la subida del archivo CSV
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
@@ -258,44 +252,50 @@
         
         const reader = new FileReader();
         reader.onload = function(e) {
-            const text = e.target.result;
-            parseCSV(text);
+            parseCSV(e.target.result);
         };
-        reader.readAsText(file, 'ISO-8859-1');
+        // ISO-8859-1 ayuda a leer correctamente acentos y eñes de Excel
+        reader.readAsText(file, 'ISO-8859-1'); 
     });
 
     function parseCSV(csvText) {
         const lines = csvText.split(/\r\n|\n/);
         const newInventory = [];
 
+        // Ignorar la cabecera (i=1)
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
+            
             const parts = line.split(',');
+            // Asegurarnos de que tenga al menos las 4 columnas (0=Codigo, 1=Desc, 2=Costo, 3=Venta)
             if (parts.length >= 4) {
-                // Se asume que el Código es la columna 0
                 newInventory.push({ 
                     code: parts[0].trim(), 
                     desc: parts[1].trim(), 
-                    cost: parts[2].trim(), 
-                    sale: parts[3].trim() 
+                    sale: parts[3].trim() // Solo guardamos la de Venta (Columna D)
                 });
             }
         }
+        
         inventory = newInventory;
+        
+        // Guardar localmente
         try {
-            localStorage.setItem('inventoryData', JSON.stringify(inventory));
-            dbStatus.textContent = `✅ Actualizado: ${inventory.length} productos.`;
-            alert('Inventario actualizado.');
+            localStorage.setItem('inventoryApp_Data', JSON.stringify(inventory));
+            dbStatus.textContent = `✅ Actualizado (${inventory.length} artículos)`;
+            alert('Base de datos cargada correctamente.');
+            searchInput.value = '';
+            searchInput.focus();
         } catch (e) {
-            dbStatus.textContent = `⚠️ Modo temporal: ${inventory.length} productos.`;
-            alert('Memoria llena, funcionará solo hasta cerrar la página.');
+            dbStatus.textContent = `⚠️ Datos temporales cargados (${inventory.length} artículos)`;
+            alert('Archivo procesado. (Memoria local llena, los datos se borrarán al cerrar).');
         }
     }
 
-    // Lógica del Buscador
+    // 3. Buscar el producto por código exacto
     function searchProduct(query) {
-        if (!query || query.length < 3) {
+        if (!query) {
             resultCard.style.display = 'none';
             errorMsg.style.display = 'none';
             return;
@@ -304,25 +304,34 @@
         const product = inventory.find(item => item.code === query);
         
         if (product) {
+            // Mostrar datos
             document.getElementById('resDesc').textContent = product.desc;
-            document.getElementById('resCost').textContent = product.cost;
             document.getElementById('resSale').textContent = product.sale;
+            
             resultCard.style.display = 'block';
             errorMsg.style.display = 'none';
             
-            // Si encontramos producto y estamos escaneando, detenemos el escáner para ver el resultado
-            if (isScanning) {
-                stopScanner();
-            }
+            // Opcional: Si encuentras el producto mientras la cámara está activa, puedes detenerla
+            // if (isScanning) stopScanner(); 
         } else {
+            // Mostrar error
             resultCard.style.display = 'none';
             errorMsg.style.display = 'block';
         }
     }
 
+    // Escuchar el tecleo/ingreso del lector de pistola (que simula un teclado)
     searchInput.addEventListener('input', (e) => searchProduct(e.target.value.trim()));
 
-    // Lógica del Escáner
+    // Auto-seleccionar el texto al presionar Enter (típico de lectores de código físicos)
+    searchInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            this.select();
+        }
+    });
+
+    // 4. Lógica de la Cámara (Escáner de celular)
     btnScan.addEventListener('click', function() {
         if (isScanning) {
             stopScanner();
@@ -334,18 +343,23 @@
     function startScanner() {
         readerDiv.style.display = 'block';
         isScanning = true;
-        btnScan.textContent = '❌'; // Botón para cancelar
-        btnScan.style.backgroundColor = '#dc2626';
+        btnScan.textContent = '❌'; 
+        btnScan.style.backgroundColor = '#ef4444';
 
         html5QrcodeScanner = new Html5Qrcode("reader");
         
-        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        // Configuración de lectura rápida
+        const config = { fps: 15, qrbox: { width: 250, height: 150 } };
         
-        // Preferir cámara trasera
-        html5QrcodeScanner.start({ facingMode: "environment" }, config, onScanSuccess)
-        .catch(err => {
-            console.log("Error al iniciar cámara", err);
-            alert("No se pudo iniciar la cámara. Asegúrate de dar permisos y usar HTTPS o Localhost.");
+        html5QrcodeScanner.start({ facingMode: "environment" }, config, (decodedText) => {
+            // Cuando detecta un código:
+            searchInput.value = decodedText; // Lo pone en el input
+            searchProduct(decodedText);      // Busca el precio
+            
+            // Pausar lectura brevemente o hacer sonido (opcional)
+        }).catch(err => {
+            console.error(err);
+            alert("No se pudo iniciar la cámara. Verifica los permisos del navegador.");
             stopScanner();
         });
     }
@@ -355,24 +369,14 @@
             html5QrcodeScanner.stop().then(() => {
                 readerDiv.style.display = 'none';
                 html5QrcodeScanner.clear();
-            }).catch(err => console.log(err));
+            }).catch(console.error);
         } else {
             readerDiv.style.display = 'none';
         }
-        
         isScanning = false;
         btnScan.textContent = '📷';
         btnScan.style.backgroundColor = 'var(--primary-color)';
     }
-
-    function onScanSuccess(decodedText, decodedResult) {
-        // Reproducir sonido beep (opcional y simple)
-        // const audio = new Audio('beep.mp3'); audio.play().catch(e=>{});
-        
-        searchInput.value = decodedText;
-        searchProduct(decodedText);
-    }
-
 </script>
 
 </body>
