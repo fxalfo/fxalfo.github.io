@@ -54,6 +54,22 @@
             margin-bottom: 1.5rem;
         }
 
+        .btn-cloud {
+            background-color: #f59e0b;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            transition: background-color 0.2s;
+            margin-bottom: 10px;
+        }
+
+        .btn-cloud:active { background-color: #d97706; }
+
         input[type="file"] { display: none; }
 
         .file-label {
@@ -94,10 +110,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: background-color 0.2s;
         }
-        
-        .btn-scan:active { background-color: #0284c7; }
 
         /* Área de cámara */
         #reader {
@@ -109,7 +122,7 @@
             background: #000;
         }
 
-        /* Tarjeta de Resultados (Solo Descripción y Venta) */
+        /* Tarjeta de Resultados */
         .result-card {
             display: none;
             background: #ecfdf5;
@@ -117,7 +130,6 @@
             border-radius: 12px;
             padding: 2rem 1.5rem;
             text-align: center;
-            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
 
         .product-desc {
@@ -170,22 +182,6 @@
             margin-bottom: 15px;
             font-weight: 500;
         }
-
-        /* Botón detener cámara de la librería */
-        #html5-qrcode-button-camera-stop {
-            margin-top: 10px;
-            padding: 8px 16px;
-            background: #ef4444;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-weight: bold;
-        }
-
-        @keyframes popIn {
-            0% { opacity: 0; transform: scale(0.9); }
-            100% { opacity: 1; transform: scale(1); }
-        }
     </style>
 </head>
 <body>
@@ -196,9 +192,11 @@
     <div class="db-status" id="dbStatus">Esperando base de datos...</div>
 
     <div class="upload-section">
-        <label for="csvFileInput" class="file-label">📥 Cargar archivo CSV de Inventario</label>
+        <button id="btnSyncCloud" class="btn-cloud">☁️ Sincronizar desde la Nube</button>
+        <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 10px;">— o cargar archivo localmente —</div>
+        
+        <label for="csvFileInput" class="file-label">📥 Cargar archivo CSV</label>
         <input type="file" id="csvFileInput" accept=".csv">
-        <div id="file-name-display" style="margin-top:8px; font-size:0.85rem; color:#0369a1;"></div>
     </div>
 
     <div id="reader"></div>
@@ -220,20 +218,25 @@
 </div>
 
 <script>
+    // ==========================================
+    // INSERTA TU ENLACE DE GOOGLE SHEETS AQUÍ ABAJO
+    // ==========================================
+    const CLOUD_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSGqkVOs39LZVXDFGrZa9SNb3f4DqorXyFv7RXMTbV2XO0Aew313GxCHuiierYQWOTwXAYZx1ZGHfeh/pub?output=csv"; 
+    // ==========================================
+
     let inventory = [];
     let html5QrcodeScanner = null;
     let isScanning = false;
 
-    // Referencias al DOM
     const fileInput = document.getElementById('csvFileInput');
     const searchInput = document.getElementById('searchInput');
     const resultCard = document.getElementById('resultCard');
     const errorMsg = document.getElementById('errorMsg');
     const dbStatus = document.getElementById('dbStatus');
     const btnScan = document.getElementById('btnScan');
+    const btnSyncCloud = document.getElementById('btnSyncCloud');
     const readerDiv = document.getElementById('reader');
 
-    // 1. Cargar datos guardados previamente en el navegador
     window.onload = function() {
         const savedData = localStorage.getItem('inventoryApp_Data');
         if (savedData) {
@@ -243,57 +246,77 @@
         }
     };
 
-    // 2. Procesar la subida del archivo CSV
+    // FUNCIÓN DE SINCRONIZACIÓN EN LA NUBE
+    btnSyncCloud.addEventListener('click', function() {
+        if(CLOUD_CSV_URL === "PEGAR_TU_ENLACE_AQUI") {
+            alert("Aún no has pegado tu enlace de Google Sheets en el código HTML.");
+            return;
+        }
+
+        dbStatus.textContent = "⏳ Conectando con la nube...";
+        
+        // Petición al servidor de Google
+        fetch(CLOUD_CSV_URL)
+            .then(response => {
+                if (!response.ok) throw new Error('Error al conectar con Google Sheets');
+                return response.text();
+            })
+            .then(csvText => {
+                parseCSV(csvText, true);
+            })
+            .catch(error => {
+                console.error(error);
+                dbStatus.textContent = "❌ Error de conexión.";
+                alert("No se pudo descargar. Verifica que el enlace provenga de 'Publicar en la web' y tengas internet.");
+            });
+    });
+
+    // Carga manual (respaldo sin internet)
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
-
-        document.getElementById('file-name-display').textContent = file.name;
         
         const reader = new FileReader();
         reader.onload = function(e) {
-            parseCSV(e.target.result);
+            parseCSV(e.target.result, false);
         };
-        // ISO-8859-1 ayuda a leer correctamente acentos y eñes de Excel
         reader.readAsText(file, 'ISO-8859-1'); 
     });
 
-    function parseCSV(csvText) {
+    function parseCSV(csvText, fromCloud) {
         const lines = csvText.split(/\r\n|\n/);
         const newInventory = [];
 
-        // Ignorar la cabecera (i=1)
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
             
             const parts = line.split(',');
-            // Asegurarnos de que tenga al menos las 4 columnas (0=Codigo, 1=Desc, 2=Costo, 3=Venta)
             if (parts.length >= 4) {
                 newInventory.push({ 
                     code: parts[0].trim(), 
                     desc: parts[1].trim(), 
-                    sale: parts[3].trim() // Solo guardamos la de Venta (Columna D)
+                    sale: parts[3].trim()
                 });
             }
         }
         
         inventory = newInventory;
         
-        // Guardar localmente
         try {
             localStorage.setItem('inventoryApp_Data', JSON.stringify(inventory));
             dbStatus.textContent = `✅ Actualizado (${inventory.length} artículos)`;
-            alert('Base de datos cargada correctamente.');
+            if(fromCloud) alert('¡Inventario sincronizado desde la nube con éxito!');
+            else alert('Archivo local cargado correctamente.');
+            
             searchInput.value = '';
             searchInput.focus();
         } catch (e) {
-            dbStatus.textContent = `⚠️ Datos temporales cargados (${inventory.length} artículos)`;
-            alert('Archivo procesado. (Memoria local llena, los datos se borrarán al cerrar).');
+            dbStatus.textContent = `⚠️ Datos temporales (${inventory.length} artículos)`;
         }
     }
 
-    // 3. Buscar el producto por código exacto
+    // Buscador
     function searchProduct(query) {
         if (!query) {
             resultCard.style.display = 'none';
@@ -304,26 +327,17 @@
         const product = inventory.find(item => item.code === query);
         
         if (product) {
-            // Mostrar datos
             document.getElementById('resDesc').textContent = product.desc;
             document.getElementById('resSale').textContent = product.sale;
-            
             resultCard.style.display = 'block';
             errorMsg.style.display = 'none';
-            
-            // Opcional: Si encuentras el producto mientras la cámara está activa, puedes detenerla
-            // if (isScanning) stopScanner(); 
         } else {
-            // Mostrar error
             resultCard.style.display = 'none';
             errorMsg.style.display = 'block';
         }
     }
 
-    // Escuchar el tecleo/ingreso del lector de pistola (que simula un teclado)
     searchInput.addEventListener('input', (e) => searchProduct(e.target.value.trim()));
-
-    // Auto-seleccionar el texto al presionar Enter (típico de lectores de código físicos)
     searchInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -331,13 +345,10 @@
         }
     });
 
-    // 4. Lógica de la Cámara (Escáner de celular)
+    // Escáner Cámara
     btnScan.addEventListener('click', function() {
-        if (isScanning) {
-            stopScanner();
-        } else {
-            startScanner();
-        }
+        if (isScanning) stopScanner();
+        else startScanner();
     });
 
     function startScanner() {
@@ -347,19 +358,13 @@
         btnScan.style.backgroundColor = '#ef4444';
 
         html5QrcodeScanner = new Html5Qrcode("reader");
-        
-        // Configuración de lectura rápida
         const config = { fps: 15, qrbox: { width: 250, height: 150 } };
         
         html5QrcodeScanner.start({ facingMode: "environment" }, config, (decodedText) => {
-            // Cuando detecta un código:
-            searchInput.value = decodedText; // Lo pone en el input
-            searchProduct(decodedText);      // Busca el precio
-            
-            // Pausar lectura brevemente o hacer sonido (opcional)
+            searchInput.value = decodedText;
+            searchProduct(decodedText);
         }).catch(err => {
-            console.error(err);
-            alert("No se pudo iniciar la cámara. Verifica los permisos del navegador.");
+            alert("No se pudo iniciar la cámara.");
             stopScanner();
         });
     }
@@ -370,8 +375,6 @@
                 readerDiv.style.display = 'none';
                 html5QrcodeScanner.clear();
             }).catch(console.error);
-        } else {
-            readerDiv.style.display = 'none';
         }
         isScanning = false;
         btnScan.textContent = '📷';
