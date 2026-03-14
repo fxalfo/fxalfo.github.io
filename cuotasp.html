@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Cuotas - Maxibruno</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            width: 100%;
+            max-width: 500px;
+            background: var(--card);
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        h2 { text-align: center; color: var(--primary); margin-bottom: 1.5rem; }
+        .input-group { margin-bottom: 1.5rem; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        input:focus { border-color: var(--primary); }
+        .results { display: grid; gap: 1rem; margin-top: 1.5rem; }
+        .card-cuota {
+            padding: 1rem;
+            border-left: 5px solid var(--primary);
+            background: #eff6ff;
+            border-radius: 8px;
+        }
+        .card-cuota h3 { margin: 0; font-size: 0.9rem; text-transform: uppercase; color: #64748b; }
+        .val-cuota { font-size: 1.4rem; font-weight: bold; margin: 5px 0; color: #0f172a; }
+        .val-total { font-size: 0.85rem; color: #64748b; }
+        .footer-info { font-size: 0.75rem; color: #94a3b8; margin-top: 2rem; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Calculador de Cuotas</h2>
+    
+    <div class="input-group">
+        <label for="monto">Monto a financiar ($)</label>
+        <input type="number" id="monto" placeholder="Ej: 834015.08" step="0.01" oninput="calcular()">
+    </div>
+
+    <div id="display-results" class="results" style="display: none;">
+        <div class="card-cuota">
+            <h3>2 Cuotas (TNA 190%)</h3>
+            <div class="val-cuota" id="c2-monto">$ 0,00</div>
+            <div class="val-total" id="c2-total">Total: $ 0,00</div>
+        </div>
+
+        <div class="card-cuota" style="border-color: #3b82f6;">
+            <h3>3 Cuotas (TNA 170%)</h3>
+            <div class="val-cuota" id="c3-monto">$ 0,00</div>
+            <div class="val-total" id="c3-total">Total: $ 0,00</div>
+        </div>
+
+        <div class="card-cuota" style="border-color: #1d4ed8;">
+            <h3>6 Cuotas (TNA 150%)</h3>
+            <div class="val-cuota" id="c6-monto">$ 0,00</div>
+            <div class="val-total" id="c6-total">Total: $ 0,00</div>
+        </div>
+    </div>
+
+    <div class="footer-info">
+        Cálculo basado en Sistema Francés + IVA (21%) sobre intereses.
+    </div>
+</div>
+
+<script>
+    function calcular() {
+        const monto = parseFloat(document.getElementById('monto').value);
+        const display = document.getElementById('display-results');
+
+        if (isNaN(monto) || monto <= 0) {
+            display.style.display = 'none';
+            return;
+        }
+
+        display.style.display = 'grid';
+
+        // Configuración de tasas (TNA, n)
+        const planes = [
+            { n: 2, tna: 1.90 },
+            { n: 3, tna: 1.70 },
+            { n: 6, tna: 1.50 }
+        ];
+
+        planes.forEach(plan => {
+            // 1. Convertir TNA a Tasa Efectiva Mensual (TEM) base 365 días + IVA
+            const tem_sin_iva = (plan.tna / 365) * 30;
+            const i = tem_sin_iva * 1.21; // Tasa con IVA
+
+            // 2. Fórmula Sistema Francés: Cuota = P * [i / (1 - (1+i)^-n)]
+            const cuota = monto * (i / (1 - Math.pow(1 + i, -plan.n)));
+            const total = cuota * plan.n;
+
+            // 3. Mostrar resultados formateados
+            document.getElementById(`c${plan.n}-monto`).innerText = formatCurrency(cuota);
+            document.getElementById(`c${plan.n}-total`).innerText = `Total: ${formatCurrency(total)}`;
+        });
+    }
+
+    function formatCurrency(value) {
+        return new Intl.NumberFormat('es-AR', {
+            style: 'currency',
+            currency: 'ARS',
+        }).format(value);
+    }
+</script>
+
+</body>
+</html>
