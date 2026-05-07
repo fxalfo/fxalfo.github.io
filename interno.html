@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Consultas - Maxibruno</title>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    
+    <style>
+        :root {
+            --primary-color: #1e40af;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-color: #1e293b;
+            --cost-color: #991b1b;
+            --sale-color: #166534;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            background: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        header { text-align: center; margin-bottom: 1.5rem; }
+        h1 { color: var(--primary-color); font-size: 1.5rem; margin: 0; }
+        .db-status { font-size: 0.75rem; color: #64748b; margin-top: 5px; }
+
+        /* Controles */
+        .search-container { position: relative; margin-bottom: 1rem; }
+        .input-group { display: flex; gap: 8px; }
+        
+        input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            font-size: 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            outline: none;
+        }
+        input[type="text"]:focus { border-color: var(--primary-color); }
+
+        .btn-scan {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.2rem;
+        }
+
+        /* Sugerencias desplegables */
+        .suggestions-list {
+            position: absolute;
+            top: 100%; left: 0; right: 0;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 0 0 8px 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            list-style: none;
+            padding: 0; margin: 0;
+            display: none;
+        }
+        .suggestion-item {
+            padding: 10px;
+            border-bottom: 1px solid #f1f5f9;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+        }
+        .suggestion-item:hover { background-color: #f8fafc; }
+        .sug-desc { font-weight: 600; font-size: 0.9rem; }
+        .sug-code { font-size: 0.75rem; color: #64748b; }
+
+        /* Cámara */
+        #reader { width: 100%; margin-bottom: 1rem; display: none; border-radius: 8px; overflow: hidden; background: #000; }
+
+        /* Tarjeta de Resultados */
+        .result-card {
+            display: none;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 1.2rem;
+            background: #fff;
+            animation: slideIn 0.3s ease;
+        }
+        .product-title { font-weight: 800; font-size: 1.1rem; margin-bottom: 1rem; color: #0f172a; text-align: center; }
+
+        .price-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .price-box { padding: 10px; border-radius: 8px; text-align: center; }
+        .cost-box { background: #fef2f2; color: var(--cost-color); }
+        .sale-box { background: #f0fdf4; color: var(--sale-color); border: 2px solid #bcf0da; }
+        
+        .label { display: block; font-size: 0.7rem; text-transform: uppercase; font-weight: bold; margin-bottom: 2px; }
+        .val { display: block; font-size: 1.3rem; font-weight: 800; }
+
+        .error-msg { color: #ef4444; text-align: center; font-weight: bold; padding: 10px; display: none; }
+
+        @keyframes slideIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Consultor de Precios</h1>
+        <div id="dbStatus" class="db-status">🔄 Sincronizando con Google Sheets...</div>
+    </header>
+
+    <div id="reader"></div>
+
+    <div class="search-container">
+        <div class="input-group">
+            <input type="text" id="searchInput" placeholder="Nombre o código..." autocomplete="off">
+            <button class="btn-scan" id="btnScan">📷</button>
+        </div>
+        <ul id="suggestionsList" class="suggestions-list"></ul>
+    </div>
+
+    <div id="resultCard" class="result-card">
+        <div class="product-title" id="resDesc">NOMBRE DEL PRODUCTO</div>
+        <div class="price-row">
+            <div class="price-box cost-box">
+                <span class="label">Costo</span>
+                <span class="val" id="resCost">$0.00</span>
+            </div>
+            <div class="price-box sale-box">
+                <span class="label">Público</span>
+                <span class="val" id="resSale">$0.00</span>
+            </div>
+        </div>
+        <div id="resCodeDisplay" style="text-align: center; font-size: 0.7rem; color: #94a3b8; margin-top: 10px;"></div>
+    </div>
+
+    <div id="errorMsg" class="error-msg">⚠️ No encontrado</div>
+</div>
+
+<script>
+    // Dirección de tu base de datos
+    const DB_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQXw6JguUct7dv50KyEPEQMqPD-WtOrBlfnWuMV_Yx91v5ty1YmNNXzZ9G-YPYlBw/pub?output=csv";
+
+    let inventory = [];
+    let html5Scanner = null;
+    let isScanning = false;
+
+    // Elementos
+    const searchInput = document.getElementById('searchInput');
+    const suggestionsList = document.getElementById('suggestionsList');
+    const resultCard = document.getElementById('resultCard');
+    const dbStatus = document.getElementById('dbStatus');
+    const btnScan = document.getElementById('btnScan');
+    const readerDiv = document.getElementById('reader');
+
+    // Al cargar: Intentar descargar la base de datos automáticamente
+    window.onload = fetchData;
+
+    function fetchData() {
+        fetch(DB_URL)
+            .then(res => res.text())
+            .then(csv => {
+                parseCSV(csv);
+                dbStatus.textContent = `✅ Sincronizado: ${inventory.length} productos`;
+            })
+            .catch(err => {
+                console.error(err);
+                dbStatus.textContent = "❌ Error de conexión. Usando datos guardados.";
+                const saved = localStorage.getItem('maxi_db');
+                if(saved) inventory = JSON.parse(saved);
+            });
+    }
+
+    function parseCSV(text) {
+        const lines = text.split(/\r\n|\n/);
+        const newData = [];
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            // Usamos una expresión regular para separar por comas ignorando comas dentro de comillas si las hubiera
+            const parts = line.split(',');
+            if (parts.length >= 4) {
+                newData.push({
+                    code: parts[0].trim(),
+                    desc: parts[1].trim(),
+                    cost: parts[2].trim(),
+                    sale: parts[3].trim(),
+                    search: (parts[1] + ' ' + parts[0]).toLowerCase()
+                });
+            }
+        }
+        inventory = newData;
+        localStorage.setItem('maxi_db', JSON.stringify(inventory));
+    }
+
+    // Búsqueda
+    searchInput.addEventListener('input', function() {
+        const query = this.value.trim().toLowerCase();
+        if (query.length < 2) {
+            suggestionsList.style.display = 'none';
+            resultCard.style.display = 'none';
+            return;
+        }
+
+        // 1. Ver si es código exacto
+        const exact = inventory.find(i => i.code === query);
+        if (exact) {
+            showResult(exact);
+            suggestionsList.style.display = 'none';
+            return;
+        }
+
+        // 2. Filtrar sugerencias
+        const matches = inventory.filter(i => i.search.includes(query)).slice(0, 40);
+        renderSuggestions(matches);
+    });
+
+    function renderSuggestions(list) {
+        suggestionsList.innerHTML = '';
+        if (list.length > 0) {
+            list.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'suggestion-item';
+                li.innerHTML = `<span class="sug-desc">${item.desc}</span><span class="sug-code">Cod: ${item.code}</span>`;
+                li.onclick = () => {
+                    showResult(item);
+                    searchInput.value = item.desc;
+                    suggestionsList.style.display = 'none';
+                };
+                suggestionsList.appendChild(li);
+            });
+            suggestionsList.style.display = 'block';
+        } else {
+            suggestionsList.style.display = 'none';
+        }
+    }
+
+    function showResult(item) {
+        document.getElementById('resDesc').textContent = item.desc;
+        document.getElementById('resCost').textContent = item.cost;
+        document.getElementById('resSale').textContent = item.sale;
+        document.getElementById('resCodeDisplay').textContent = "Código: " + item.code;
+        resultCard.style.display = 'block';
+        if(isScanning) stopScanner();
+    }
+
+    // Escáner
+    btnScan.addEventListener('click', () => {
+        if(isScanning) stopScanner(); else startScanner();
+    });
+
+    function startScanner() {
+        readerDiv.style.display = 'block';
+        isScanning = true;
+        btnScan.textContent = '❌';
+        html5Scanner = new Html5Qrcode("reader");
+        html5Scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, 
+            (text) => {
+                searchInput.value = text;
+                const found = inventory.find(i => i.code === text);
+                if(found) showResult(found);
+            }
+        ).catch(() => { alert("Error cámara"); stopScanner(); });
+    }
+
+    function stopScanner() {
+        if(html5Scanner) html5Scanner.stop().then(()=>html5Scanner.clear());
+        readerDiv.style.display = 'none';
+        isScanning = false;
+        btnScan.textContent = '📷';
+    }
+
+    // Cerrar lista al clickear fuera
+    document.addEventListener('click', (e) => {
+        if(!searchInput.contains(e.target)) suggestionsList.style.display = 'none';
+    });
+</script>
+
+</body>
+</html>
