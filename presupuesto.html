@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Presupuesto - Maxibruno</title>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500&family=Montserrat:wght@600;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-color: #0284c7;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-color: #0f172a;
+            --border-color: #e2e8f0;
+            --danger-color: #ef4444;
+            --success-color: #10b981;
+            --wa-color: #25D366;
+        }
+
+        body {
+            font-family: 'Fira Sans', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            background: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        h1 {
+            font-family: 'Montserrat', sans-serif;
+            text-align: center;
+            color: var(--primary-color);
+            margin: 0 0 5px 0;
+            font-size: 1.5rem;
+            text-transform: uppercase;
+        }
+        
+        .db-status {
+            font-size: 0.8rem;
+            color: #64748b;
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        /* Buscador */
+        .search-container { position: relative; margin-bottom: 1.5rem; }
+        .input-group { display: flex; gap: 8px; }
+        
+        input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            font-family: 'Fira Sans', sans-serif;
+            font-size: 1rem;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            outline: none;
+        }
+        input[type="text"]:focus { border-color: var(--primary-color); }
+
+        .btn-scan {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Sugerencias */
+        .suggestions-list {
+            position: absolute;
+            top: 100%; left: 0; right: 0;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            list-style: none;
+            padding: 0; margin: 0;
+            display: none;
+        }
+        .suggestion-item {
+            padding: 10px;
+            border-bottom: 1px solid #f1f5f9;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+        }
+        .suggestion-item:hover { background-color: #f8fafc; }
+        .sug-desc { font-weight: 500; font-size: 0.9rem; }
+        .sug-price { font-size: 0.8rem; color: var(--success-color); font-weight: bold; margin-top: 2px; }
+
+        #reader { width: 100%; margin-bottom: 1rem; display: none; border-radius: 8px; overflow: hidden; background: #000; }
+
+        /* Lista de Presupuesto */
+        .quote-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 5px;
+        }
+        .quote-header h2 { margin: 0; font-size: 1.1rem; color: #334155; }
+        .item-count { font-size: 0.8rem; background: #e2e8f0; padding: 2px 8px; border-radius: 12px; }
+
+        .quote-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+        
+        .quote-item {
+            background: #f8fafc;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .item-details { display: flex; flex-direction: column; }
+        .item-name { font-weight: 500; font-size: 0.95rem; margin-bottom: 5px; }
+        .item-price { font-size: 0.85rem; color: #64748b; }
+
+        .item-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .qty-input {
+            width: 50px;
+            padding: 5px;
+            text-align: center;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-family: 'Fira Sans', sans-serif;
+        }
+        
+        .item-subtotal { font-weight: bold; width: 70px; text-align: right; color: var(--text-color); }
+        
+        .btn-remove {
+            background: none;
+            border: none;
+            color: var(--danger-color);
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 5px;
+        }
+
+        /* Totales y Botones Finales */
+        .total-section {
+            background: #ecfdf5;
+            border: 2px solid #34d399;
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .total-label { font-family: 'Montserrat', sans-serif; font-size: 1.2rem; color: #064e3b; }
+        .total-value { font-family: 'Montserrat', sans-serif; font-size: 1.8rem; font-weight: 800; color: var(--success-color); }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+        }
+        
+        .btn-clear {
+            background-color: white;
+            color: var(--danger-color);
+            border: 2px solid var(--danger-color);
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-print {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-whatsapp {
+            background-color: var(--wa-color);
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #94a3b8;
+            padding: 20px;
+            font-style: italic;
+        }
+
+        @media (max-width: 480px) {
+            .action-buttons {
+                grid-template-columns: 1fr; /* Apila los botones en pantallas muy chicas */
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Presupuesto Maxibruno</h1>
+    <div id="dbStatus" class="db-status">🔄 Sincronizando datos...</div>
+
+    <div id="reader"></div>
+
+    <div class="search-container">
+        <div class="input-group">
+            <input type="text" id="searchInput" placeholder="Escanear, nombre o código..." autocomplete="off">
+            <button class="btn-scan" id="btnScan">📷</button>
+        </div>
+        <ul id="suggestionsList" class="suggestions-list"></ul>
+    </div>
+
+    <div class="quote-header">
+        <h2>Detalle</h2>
+        <span class="item-count" id="itemCount">0 / 10 ítems</span>
+    </div>
+
+    <div id="quoteList" class="quote-list">
+        <div class="empty-state">Agrega productos escaneando o buscando arriba.</div>
+    </div>
+
+    <div class="total-section">
+        <span class="total-label">TOTAL</span>
+        <span class="total-value" id="grandTotal">$0.00</span>
+    </div>
+
+    <div class="action-buttons">
+        <button class="btn-clear" onclick="clearQuote()">🗑️ Nuevo</button>
+        <button class="btn-print" onclick="window.print()">🖨️ Imprimir</button>
+        <button class="btn-whatsapp" onclick="sendWhatsApp()">💬 WhatsApp</button>
+    </div>
+</div>
+
+<script>
+    const DB_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQXw6JguUct7dv50KyEPEQMqPD-WtOrBlfnWuMV_Yx91v5ty1YmNNXzZ9G-YPYlBw/pub?output=csv";
+
+    let inventory = [];
+    let quoteItems = []; 
+    let html5Scanner = null;
+    let isScanning = false;
+
+    function parsePriceString(priceStr) {
+        if (!priceStr) return 0;
+        let clean = priceStr.replace('$', '').trim();
+        return parseFloat(clean) || 0;
+    }
+
+    const formatMoney = (amount) => {
+        return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(amount);
+    };
+
+    window.onload = () => {
+        fetch(DB_URL)
+            .then(res => res.text())
+            .then(csv => {
+                parseCSV(csv);
+                document.getElementById('dbStatus').textContent = `✅ Base lista (${inventory.length} prod.)`;
+            })
+            .catch(err => {
+                document.getElementById('dbStatus').textContent = "❌ Usando datos sin conexión";
+                const saved = localStorage.getItem('maxi_db');
+                if(saved) inventory = JSON.parse(saved);
+            });
+    };
+
+    function parseCSV(text) {
+        const lines = text.split(/\r\n|\n/);
+        const newData = [];
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            const parts = line.split(',');
+            if (parts.length >= 4) {
+                newData.push({
+                    code: parts[0].trim(),
+                    desc: parts[1].trim(),
+                    salePrice: parsePriceString(parts[3].trim()), 
+                    search: (parts[1] + ' ' + parts[0]).toLowerCase()
+                });
+            }
+        }
+        inventory = newData;
+        localStorage.setItem('maxi_db', JSON.stringify(inventory));
+    }
+
+    /* --- LÓGICA DE PRESUPUESTO --- */
+
+    function addProductToQuote(product) {
+        const existingItemIndex = quoteItems.findIndex(item => item.code === product.code);
+        
+        if (existingItemIndex >= 0) {
+            quoteItems[existingItemIndex].qty += 1;
+        } else {
+            if (quoteItems.length >= 10) {
+                alert("Has alcanzado el límite de 10 productos diferentes por presupuesto.");
+                return;
+            }
+            quoteItems.push({
+                code: product.code,
+                desc: product.desc,
+                price: product.salePrice,
+                qty: 1
+            });
+        }
+        renderQuote();
+    }
+
+    function updateItemQty(index, newQty) {
+        const qty = parseInt(newQty);
+        if (isNaN(qty) || qty < 1) {
+            quoteItems[index].qty = 1; 
+        } else {
+            quoteItems[index].qty = qty;
+        }
+        renderQuote();
+    }
+
+    function removeProduct(index) {
+        quoteItems.splice(index, 1);
+        renderQuote();
+    }
+
+    function clearQuote() {
+        if(confirm("¿Estás seguro de borrar todo y empezar un presupuesto nuevo?")) {
+            quoteItems = [];
+            renderQuote();
+            document.getElementById('searchInput').focus();
+        }
+    }
+
+    function renderQuote() {
+        const listDiv = document.getElementById('quoteList');
+        const countSpan = document.getElementById('itemCount');
+        const totalSpan = document.getElementById('grandTotal');
+        
+        countSpan.textContent = `${quoteItems.length} / 10 ítems`;
+        
+        if (quoteItems.length === 0) {
+            listDiv.innerHTML = '<div class="empty-state">Agrega productos escaneando o buscando arriba.</div>';
+            totalSpan.textContent = "$0.00";
+            return;
+        }
+
+        listDiv.innerHTML = '';
+        let grandTotal = 0;
+
+        quoteItems.forEach((item, index) => {
+            const subtotal = item.price * item.qty;
+            grandTotal += subtotal;
+
+            const div = document.createElement('div');
+            div.className = 'quote-item';
+            div.innerHTML = `
+                <div class="item-details">
+                    <span class="item-name">${item.desc}</span>
+                    <span class="item-price">${formatMoney(item.price)} x unidad</span>
+                </div>
+                <div class="item-controls">
+                    <input type="number" class="qty-input" value="${item.qty}" min="1" onchange="updateItemQty(${index}, this.value)">
+                    <span class="item-subtotal">${formatMoney(subtotal)}</span>
+                    <button class="btn-remove" onclick="removeProduct(${index})" title="Quitar">✖</button>
+                </div>
+            `;
+            listDiv.appendChild(div);
+        });
+
+        totalSpan.textContent = formatMoney(grandTotal);
+    }
+
+    /* --- LÓGICA WHATSAPP --- */
+    function sendWhatsApp() {
+        if (quoteItems.length === 0) {
+            alert("No hay productos en el presupuesto para enviar.");
+            return;
+        }
+
+        // Construir el mensaje
+        let message = "Hola! 👋 Aquí tienes tu presupuesto de *Maxibruno*:\n\n";
+        
+        let grandTotal = 0;
+        quoteItems.forEach(item => {
+            const subtotal = item.price * item.qty;
+            grandTotal += subtotal;
+            message += `▪️ ${item.qty}x ${item.desc} - ${formatMoney(subtotal)}\n`;
+        });
+
+        message += `\n*TOTAL: ${formatMoney(grandTotal)}*\n\n`;
+        message += "¡Gracias por elegirnos! 📍 Posadas, Misiones.";
+
+        const encodedMessage = encodeURIComponent(message);
+        
+        // Pedir número (opcional)
+        const phoneInput = prompt(
+            "Ingresa el número de WhatsApp del cliente (ej: 549376...).\n\nDéjalo en blanco para abrir tu agenda de contactos:"
+        );
+
+        let url;
+        if (phoneInput && phoneInput.trim() !== "") {
+            // Limpiar posibles espacios o signos
+            const cleanPhone = phoneInput.replace(/\D/g, ''); 
+            url = `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
+        } else if (phoneInput === null) {
+            // Si el usuario canceló el prompt
+            return; 
+        } else {
+            // Si lo dejó en blanco, abre la selección de contactos
+            url = `https://wa.me/?text=${encodedMessage}`;
+        }
+
+        window.open(url, '_blank');
+    }
+
+    /* --- BUSCADOR Y ESCÁNER --- */
+    const searchInput = document.getElementById('searchInput');
+    const suggestionsList = document.getElementById('suggestionsList');
+
+    searchInput.addEventListener('input', function() {
+        const query = this.value.trim().toLowerCase();
+        if (query.length < 2) {
+            suggestionsList.style.display = 'none';
+            return;
+        }
+
+        const exact = inventory.find(i => i.code === query);
+        if (exact) {
+            addProductToQuote(exact);
+            this.value = ''; 
+            suggestionsList.style.display = 'none';
+            return;
+        }
+
+        const matches = inventory.filter(i => i.search.includes(query)).slice(0, 15);
+        renderSuggestions(matches);
+    });
+
+    function renderSuggestions(list) {
+        suggestionsList.innerHTML = '';
+        if (list.length > 0) {
+            list.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'suggestion-item';
+                li.innerHTML = `
+                    <span class="sug-desc">${item.desc}</span>
+                    <span class="sug-price">${formatMoney(item.salePrice)}</span>
+                `;
+                li.onclick = () => {
+                    addProductToQuote(item);
+                    searchInput.value = '';
+                    suggestionsList.style.display = 'none';
+                    searchInput.focus();
+                };
+                suggestionsList.appendChild(li);
+            });
+            suggestionsList.style.display = 'block';
+        } else {
+            suggestionsList.style.display = 'none';
+        }
+    }
+
+    searchInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (suggestionsList.style.display === 'block' && suggestionsList.firstChild) {
+                suggestionsList.firstChild.click();
+            }
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if(!searchInput.contains(e.target)) suggestionsList.style.display = 'none';
+    });
+
+    const btnScan = document.getElementById('btnScan');
+    const readerDiv = document.getElementById('reader');
+
+    btnScan.addEventListener('click', () => {
+        if(isScanning) stopScanner(); else startScanner();
+    });
+
+    function startScanner() {
+        readerDiv.style.display = 'block';
+        isScanning = true;
+        btnScan.textContent = '❌';
+        btnScan.style.backgroundColor = 'var(--danger-color)';
+        
+        html5Scanner = new Html5Qrcode("reader");
+        html5Scanner.start({ facingMode: "environment" }, { fps: 15, qrbox: { width: 250, height: 150 } }, 
+            (text) => {
+                const found = inventory.find(i => i.code === text);
+                if(found) {
+                    addProductToQuote(found);
+                }
+            }
+        ).catch(() => { alert("Error al iniciar cámara."); stopScanner(); });
+    }
+
+    function stopScanner() {
+        if(html5Scanner) html5Scanner.stop().then(()=>html5Scanner.clear());
+        readerDiv.style.display = 'none';
+        isScanning = false;
+        btnScan.textContent = '📷';
+        btnScan.style.backgroundColor = 'var(--primary-color)';
+    }
+
+</script>
+
+</body>
+</html>
