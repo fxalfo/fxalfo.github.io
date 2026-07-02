@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maxibruno - Verificador de Precios</title>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500&family=Montserrat:wght@600;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-color: #0284c7;
+            --bg-color: #f0f9ff;
+            --card-bg: #ffffff;
+            --text-color: #0f172a;
+            --price-color: #059669;
+        }
+
+        body {
+            font-family: 'Fira Sans', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            font-family: 'Montserrat', sans-serif;
+            text-align: center;
+            color: var(--primary-color);
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+            font-size: 1.8rem;
+            text-transform: uppercase;
+            letter-spacing: -0.5px;
+        }
+        
+        .db-status {
+            font-size: 0.8rem;
+            color: #64748b;
+            text-align: center;
+            margin-bottom: 1.5rem;
+            font-weight: 500;
+        }
+
+        /* Buscador */
+        .search-container { position: relative; margin-bottom: 1.5rem; }
+        .input-group { display: flex; gap: 10px; }
+        
+        input[type="text"] {
+            flex: 1;
+            padding: 15px;
+            font-family: 'Fira Sans', sans-serif;
+            font-size: 1.1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            outline: none;
+            text-align: center;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus { border-color: var(--primary-color); }
+
+        .btn-scan {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+        }
+        .btn-scan:active { background-color: #0369a1; }
+
+        /* Lista Desplegable */
+        .suggestions-list {
+            position: absolute;
+            top: 100%; left: 0; right: 0;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: 220px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+            list-style: none;
+            padding: 0; margin: 0;
+            display: none;
+        }
+        .suggestion-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #f1f5f9;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+        }
+        .suggestion-item:hover { background-color: #f8fafc; }
+        .sug-desc { font-weight: 500; font-size: 0.95rem; color: #1e293b; }
+        .sug-code { font-size: 0.75rem; color: #94a3b8; margin-top: 3px; }
+
+        /* Cámara */
+        #reader { width: 100%; margin-bottom: 1.5rem; display: none; border-radius: 12px; overflow: hidden; background: #000; }
+
+        /* Tarjeta de Resultados (Solo Público) */
+        .result-card {
+            display: none;
+            background: #ecfdf5;
+            border: 2px solid #34d399;
+            border-radius: 12px;
+            padding: 2rem 1.5rem;
+            text-align: center;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .product-desc {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: #064e3b;
+            line-height: 1.3;
+        }
+
+        .sale-price-container {
+            background: #ffffff;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+        }
+
+        .price-label {
+            display: block;
+            font-size: 0.85rem;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: 500;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+        }
+
+        .price-value {
+            font-family: 'Montserrat', sans-serif;
+            display: block;
+            font-size: 3rem;
+            font-weight: 800;
+            color: var(--price-color);
+            letter-spacing: -1px;
+        }
+        
+        .code-display {
+            margin-top: 15px;
+            font-size: 0.8rem;
+            color: #10b981;
+            font-weight: 500;
+        }
+
+        .error-msg {
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 500;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        @keyframes popIn {
+            0% { opacity: 0; transform: scale(0.95); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Maxibruno</h1>
+    <div id="dbStatus" class="db-status">🔄 Conectando al sistema central...</div>
+
+    <div id="reader"></div>
+
+    <div class="search-container">
+        <div class="input-group">
+            <input type="text" id="searchInput" placeholder="Escanear, nombre o código..." autocomplete="off">
+            <button class="btn-scan" id="btnScan" title="Activar Cámara">📷</button>
+        </div>
+        <ul id="suggestionsList" class="suggestions-list"></ul>
+    </div>
+
+    <div id="resultCard" class="result-card">
+        <div class="product-desc" id="resDesc">Nombre del Producto</div>
+        <div class="sale-price-container">
+            <span class="price-label">Precio al Público</span>
+            <span class="price-value" id="resSale">$0.00</span>
+        </div>
+        <div class="code-display" id="resCode">Cod: ---</div>
+    </div>
+
+    <div id="errorMsg" class="error-msg">⚠️ Producto no encontrado en el sistema</div>
+</div>
+
+<script>
+    const DB_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQq6ZWJlXuQi5nhXR2fvRCHPwfeIWVrRsvE0Gs2QaeIM_SenTHEuv7f-ogUd1_hYg/pub?gid=499386176&single=true&output=csv";
+
+    let inventory = [];
+    let html5Scanner = null;
+    let isScanning = false;
+
+    const searchInput = document.getElementById('searchInput');
+    const suggestionsList = document.getElementById('suggestionsList');
+    const resultCard = document.getElementById('resultCard');
+    const dbStatus = document.getElementById('dbStatus');
+    const btnScan = document.getElementById('btnScan');
+    const readerDiv = document.getElementById('reader');
+
+    // Carga Inteligente al iniciar
+    window.onload = () => {
+        fetch(DB_URL)
+            .then(res => res.text())
+            .then(csv => {
+                parseCSV(csv);
+                dbStatus.textContent = `✅ Sistema actualizado (${inventory.length} productos)`;
+            })
+            .catch(err => {
+                dbStatus.textContent = "❌ Modo sin conexión (Datos previos)";
+                const saved = localStorage.getItem('maxibruno_public_db');
+                if(saved) inventory = JSON.parse(saved);
+            });
+    };
+
+    function parseCSV(text) {
+        const lines = text.split(/\r\n|\n/);
+        const newData = [];
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            const parts = line.split(',');
+            // Extraemos solo el código (0), descripción (1) y precio público (3). Ignoramos el costo (2).
+            if (parts.length >= 4) {
+                newData.push({
+                    code: parts[0].trim(),
+                    desc: parts[1].trim(),
+                    sale: parts[3].trim(),
+                    search: (parts[1] + ' ' + parts[0]).toLowerCase()
+                });
+            }
+        }
+        inventory = newData;
+        localStorage.setItem('maxibruno_public_db', JSON.stringify(inventory));
+    }
+
+    // Lógica de Búsqueda Múltiple
+    searchInput.addEventListener('input', function() {
+        const query = this.value.trim().toLowerCase();
+        if (query.length < 2) {
+            suggestionsList.style.display = 'none';
+            resultCard.style.display = 'none';
+            errorMsg.style.display = 'none';
+            return;
+        }
+
+        // 1. Escaneo exacto / Ingreso manual de código
+        const exact = inventory.find(i => i.code === query);
+        if (exact) {
+            showResult(exact);
+            suggestionsList.style.display = 'none';
+            return;
+        }
+
+        // 2. Búsqueda por nombre
+        const matches = inventory.filter(i => i.search.includes(query)).slice(0, 30);
+        renderSuggestions(matches);
+    });
+
+    function renderSuggestions(list) {
+        suggestionsList.innerHTML = '';
+        if (list.length > 0) {
+            list.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'suggestion-item';
+                li.innerHTML = `<span class="sug-desc">${item.desc}</span><span class="sug-code">Código: ${item.code}</span>`;
+                li.onclick = () => {
+                    showResult(item);
+                    searchInput.value = ''; // Limpiamos para el próximo escaneo
+                    suggestionsList.style.display = 'none';
+                };
+                suggestionsList.appendChild(li);
+            });
+            suggestionsList.style.display = 'block';
+            errorMsg.style.display = 'none';
+        } else {
+            suggestionsList.style.display = 'none';
+            if (searchInput.value.length > 3) {
+                resultCard.style.display = 'none';
+                errorMsg.style.display = 'block';
+            }
+        }
+    }
+
+    function showResult(item) {
+        document.getElementById('resDesc').textContent = item.desc;
+        document.getElementById('resSale').textContent = item.sale;
+        document.getElementById('resCode').textContent = "Cód: " + item.code;
+        
+        resultCard.style.display = 'block';
+        errorMsg.style.display = 'none';
+        
+        if(isScanning) stopScanner();
+    }
+
+    // Tecla Enter para lectores físicos
+    searchInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (suggestionsList.style.display === 'block' && suggestionsList.firstChild) {
+                suggestionsList.firstChild.click();
+            } else {
+                this.select();
+            }
+        }
+    });
+
+    // Escáner de celular
+    btnScan.addEventListener('click', () => {
+        if(isScanning) stopScanner(); else startScanner();
+    });
+
+    function startScanner() {
+        readerDiv.style.display = 'block';
+        isScanning = true;
+        btnScan.textContent = '❌';
+        btnScan.style.backgroundColor = '#ef4444';
+        
+        html5Scanner = new Html5Qrcode("reader");
+        html5Scanner.start({ facingMode: "environment" }, { fps: 15, qrbox: { width: 250, height: 150 } }, 
+            (text) => {
+                searchInput.value = text;
+                const found = inventory.find(i => i.code === text);
+                if(found) {
+                    showResult(found);
+                    searchInput.value = ''; // Limpia el input para la siguiente lectura
+                }
+            }
+        ).catch(() => { alert("Verifique los permisos de cámara."); stopScanner(); });
+    }
+
+    function stopScanner() {
+        if(html5Scanner) html5Scanner.stop().then(()=>html5Scanner.clear());
+        readerDiv.style.display = 'none';
+        isScanning = false;
+        btnScan.textContent = '📷';
+        btnScan.style.backgroundColor = 'var(--primary-color)';
+    }
+
+    // Ocultar sugerencias al hacer clic fuera
+    document.addEventListener('click', (e) => {
+        if(!searchInput.contains(e.target)) suggestionsList.style.display = 'none';
+    });
+</script>
+
+</body>
+</html>
