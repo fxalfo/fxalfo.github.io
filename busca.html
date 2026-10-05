@@ -1,3 +1,28 @@
+Conversación con Gemini
+
+Necesito un buscador que despliegue los datos de dos hojas de cálculos. La idea es que ingresando nombre, o parte del nombre, despliegue lo datos de las filas que contienen las coincidencias. el archivo es https://docs.google.com/spreadsheets/d/e/2PACX-1vQXw6JguUct7dv50KyEPEQMqPD-WtOrBlfnWuMV_Yx91v5ty1YmNNXzZ9G-YPYlBw/pub?output=csv sus concidencia las marcarás con una etiqueta " Chacabuco" y https://docs.google.com/spreadsheets/d/e/2PACX-1vSK-qy1lLYtoXgA33v2gfewvcG4HsdCUsyckhWOkmhXm6eeAON7qDEVd6oJE5PugQ/pub?output=csv sus coincidencias las marcararás con una etiqueta "Itaembé" el archivo del buscador puede ser una hoja html que alojaré en Github
+
+Your HTML file is ready
+Icono de HTML
+buscador
+ HTML 
+
+Preparé una aplicación web en un solo archivo (Single-Page Application) ideal para que la subas directamente a tu repositorio de GitHub Pages ([https://fxalfo.github.io](https://fxalfo.github.io)).
+
+Este código utiliza la librería PapaParse para procesar de manera rápida y robusta los archivos CSV publicados directamente desde Google Sheets.
+¿Cómo funciona?
+
+    Carga simultánea: Al abrir la página, el script se conecta a las dos URLs de Google Sheets (Chacabuco e Itaembé) y descarga los datos.
+
+    Etiquetado: A medida que parsea las filas, le inyecta internamente la propiedad de origen (_origen y su clase CSS correspondiente) para que sepas de dónde viene cada resultado.
+
+    Búsqueda global: El campo de texto escucha cada vez que tipeás (evento input). Busca tus palabras en todas las columnas de las hojas de cálculo, por lo que podés buscar por nombre, por código, o por cualquier otro dato que tengas en las celdas.
+
+    Diseño: Tiene un diseño limpio y responsive, agrupando los resultados en tarjetas ("cards") donde resalta arriba de todo la etiqueta visual (azul para Chacabuco, verde para Itaembé).
+
+Puedes descargar el archivo generado desde el enlace de arriba y subirlo a tu repositorio, o si prefieres copiar y pegar el código directamente en tu editor local, aquí lo tienes:
+HTML
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -233,3 +258,374 @@
     </script>
 </body>
 </html>
+
+necesito poder filtrar los resultados por departamento, también si es posible que sea capaz de encontrar palabras alternadas en la descripción del poducto, por ejemplo "yogur la serenisima de 1 L de frutilla" o "yogur de frutilla de un litro la serenisima" debería mostrar "YOGUR LA SERENISIMA 1 L CLASICO FRUTILLA" en la coincidencia.
+
+Your file is updated and ready to download
+Icono de HTML
+buscador_avanzado
+ HTML 
+
+¡Listo! He actualizado y mejorado completamente la aplicación. Ahora incluye ambas funcionalidades: el filtro por departamento y la búsqueda inteligente multidireccional que pediste.
+¿Qué mejoras incluye esta nueva versión?
+
+    Búsqueda multidireccional ("Fuzzy Match"):
+
+        Ya no importa el orden de las palabras. Si escribes "yogur de frutilla de un litro la serenisima", el sistema buscará las coincidencias separadas.
+
+        Se ignoran los "Stop words": El buscador automáticamente descarta palabras conectoras como "de", "la", "el", "un", "con", para no entorpecer la búsqueda.
+
+        Diccionario de sinónimos de unidades: Agregué un conversor oculto que transforma "un litro" o "1 litro" en "1 l", y "medio litro" en "500 ml". De esta forma, si el cliente busca "yogur un litro", la herramienta sabe que debe buscar "1 l" en el CSV.
+
+        Eliminación de acentos: Ignora si escriben "limón" o "limon".
+
+    Filtro automático por Departamento:
+
+        El código escanea las columnas de tu hoja de Google Sheets buscando alguna columna que se llame "Departamento" o "Rubro".
+
+        Toma todos los departamentos únicos que existen en tus datos, los ordena alfabéticamente y arma un desplegable (Dropdown) dinámico.
+
+        Puedes usar el desplegable solo (para ver todo un departamento) o combinarlo con el texto (para buscar "frutilla" solo dentro del departamento Lácteos, por ejemplo).
+
+    Optimización de rendimiento (Anti-Freeze):
+
+        Agregué un límite de renderizado de 100 resultados. Si seleccionas un departamento que tiene 800 productos, pintar 800 tarjetas en pantalla de golpe congela los celulares. Ahora te informará "Se encontraron 800 resultados. Mostrando los primeros 100", invitando a ser un poco más específico con el texto.   
+        HTML
+
+Descarga el archivo buscador_avanzado.html desde el enlace que figura arriba y súbelo a tu repositorio de GitHub Pages.
+
+
+Gemini es una IA y puede cometer errores.
+Refining the Logic
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscador de Inventario Avanzado</title>
+    <!-- PapaParse para procesar CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        :root {
+            --chacabuco-color: #0d6efd;
+            --itaembe-color: #198754;
+            --bg-color: #f8f9fa;
+            --card-bg: #ffffff;
+            --text-color: #212529;
+            --border-color: #dee2e6;
+        }
+        
+        body { 
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+            padding: 20px; 
+            background-color: var(--bg-color); 
+            color: var(--text-color);
+            margin: 0;
+        }
+        
+        .container { 
+            max-width: 900px; 
+            margin: 0 auto; 
+        }
+        
+        h2 {
+            text-align: center;
+            color: #333;
+        }
+        
+        .search-wrapper {
+            position: sticky;
+            top: 10px;
+            background: var(--card-bg);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            z-index: 100;
+            border: 1px solid var(--border-color);
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .input-group {
+            flex: 1;
+            min-width: 250px;
+        }
+        
+        input[type="text"], select { 
+            width: 100%; 
+            padding: 14px; 
+            font-size: 16px; 
+            border: 2px solid #e9ecef; 
+            border-radius: 6px; 
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+            background-color: #fff;
+        }
+        
+        input[type="text"]:focus, select:focus {
+            outline: none;
+            border-color: #86b7fe;
+        }
+        
+        .tag { 
+            display: inline-block; 
+            padding: 4px 10px; 
+            border-radius: 12px; 
+            color: white; 
+            font-size: 12px; 
+            font-weight: 600; 
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+        }
+        
+        .tag-chacabuco { background-color: var(--chacabuco-color); }
+        .tag-itaembe { background-color: var(--itaembe-color); }
+        
+        .result-card { 
+            background: var(--card-bg);
+            padding: 16px; 
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            transition: transform 0.1s ease-in-out;
+        }
+
+        .result-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .row-data { 
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px; 
+        }
+        
+        .cell { 
+            background: #f1f3f5; 
+            padding: 8px 12px; 
+            border-radius: 6px; 
+            font-size: 14px;
+            word-break: break-word;
+        }
+        
+        .cell strong {
+            display: block;
+            font-size: 12px;
+            color: #6c757d;
+            margin-bottom: 2px;
+            text-transform: uppercase;
+        }
+        
+        #status, #results-info { 
+            text-align: center;
+            color: #6c757d; 
+            margin: 10px 0 20px 0;
+            font-size: 14px;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Buscador de Datos Avanzado</h2>
+        
+        <div class="search-wrapper">
+            <div class="input-group">
+                <input type="text" id="searchInput" placeholder="Ej: yogur frutilla 1 L serenisima..." disabled>
+            </div>
+            <div class="input-group" id="deptContainer" style="flex: 0.5; min-width: 200px;">
+                <select id="deptSelect" disabled>
+                    <option value="">Todos los departamentos</option>
+                </select>
+            </div>
+        </div>
+        
+        <div id="status">Conectando y analizando datos de Google Sheets...</div>
+        <div id="results-info"></div>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        const urlChacabuco = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQXw6JguUct7dv50KyEPEQMqPD-WtOrBlfnWuMV_Yx91v5ty1YmNNXzZ9G-YPYlBw/pub?output=csv';
+        const urlItaembe = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSK-qy1lLYtoXgA33v2gfewvcG4HsdCUsyckhWOkmhXm6eeAON7qDEVd6oJE5PugQ/pub?output=csv';
+
+        let combinedData = [];
+        let deptKey = null; // Clave exacta usada para Departamento
+
+        // Función para quitar acentos (diacríticos)
+        function removeAccents(str) {
+            return str.normalize("NFD").replace(/[̀-ͯ]/g, "");
+        }
+
+        // Función para normalizar texto, manejar sinónimos y quitar acentos
+        function normalizeText(text) {
+            if (!text) return "";
+            let t = text.toString().toLowerCase().trim();
+            t = removeAccents(t);
+            // Reemplazo de sinónimos comunes para facilitar la coincidencia
+            t = t.replace(/\bun litro\b/g, "1 l");
+            t = t.replace(/\b1 litro\b/g, "1 l");
+            t = t.replace(/\bmedio litro\b/g, "500 ml");
+            t = t.replace(/\b1\/2 litro\b/g, "500 ml");
+            return t;
+        }
+
+        async function loadData() {
+            try {
+                const [resChacabuco, resItaembe] = await Promise.all([
+                    fetch(urlChacabuco).then(r => r.text()),
+                    fetch(urlItaembe).then(r => r.text())
+                ]);
+
+                const dataChacabuco = Papa.parse(resChacabuco, { header: true, skipEmptyLines: true }).data;
+                const dataItaembe = Papa.parse(resItaembe, { header: true, skipEmptyLines: true }).data;
+
+                dataChacabuco.forEach(row => { row._origen = 'Chacabuco'; row._clase = 'tag-chacabuco'; combinedData.push(row); });
+                dataItaembe.forEach(row => { row._origen = 'Itaembé'; row._clase = 'tag-itaembe'; combinedData.push(row); });
+
+                document.getElementById('status').classList.add('hidden');
+                
+                // Buscar cuál es la columna de "Departamento" o "Sección"
+                if (combinedData.length > 0) {
+                    const keys = Object.keys(combinedData[0]);
+                    deptKey = keys.find(k => removeAccents(k.toLowerCase()).includes('departamento') || removeAccents(k.toLowerCase()).includes('rubro'));
+                    
+                    if (deptKey) {
+                        // Extraer departamentos únicos, ordenarlos alfabéticamente
+                        const depts = [...new Set(combinedData.map(item => item[deptKey]).filter(d => d && d.trim() !== ''))].sort();
+                        const select = document.getElementById('deptSelect');
+                        depts.forEach(d => {
+                            const option = document.createElement('option');
+                            option.value = d;
+                            option.textContent = d;
+                            select.appendChild(option);
+                        });
+                        select.disabled = false;
+                        select.addEventListener('change', handleSearch);
+                    } else {
+                        document.getElementById('deptContainer').classList.add('hidden');
+                    }
+                }
+
+                const searchInput = document.getElementById('searchInput');
+                searchInput.disabled = false;
+                searchInput.focus();
+                
+                // Escuchar el evento input para búsqueda en tiempo real
+                searchInput.addEventListener('input', handleSearch);
+
+            } catch (error) {
+                document.getElementById('status').classList.remove('hidden');
+                document.getElementById('status').innerText = 'Error al cargar los datos. Verifica la conexión.';
+                console.error('Error:', error);
+            }
+        }
+
+        function handleSearch() {
+            const rawQuery = document.getElementById('searchInput').value;
+            const selectedDept = document.getElementById('deptSelect') ? document.getElementById('deptSelect').value : '';
+            const resultsContainer = document.getElementById('results');
+            const resultsInfo = document.getElementById('results-info');
+            
+            resultsContainer.innerHTML = '';
+            resultsInfo.innerHTML = '';
+
+            // Si ambos filtros están vacíos, no mostrar nada para ahorrar memoria
+            if (rawQuery.trim().length === 0 && selectedDept === '') {
+                return;
+            }
+
+            // Normalizar la consulta (convierte "un litro" en "1 l", quita acentos)
+            const query = normalizeText(rawQuery);
+            
+            // Palabras "vacías" que ignoramos en la búsqueda para que no interfieran
+            const stopWords = ['de', 'la', 'el', 'los', 'las', 'un', 'una', 'unos', 'unas', 'con', 'para', 'del', 'al', 'y', 'o', 'en'];
+            
+            // Separar por espacios y quedarnos con las palabras útiles
+            const tokens = query.split(/\s+/).filter(t => t.length > 0 && !stopWords.includes(t));
+
+            let filtered = combinedData.filter(row => {
+                // 1. Filtrar por Departamento si hay uno seleccionado
+                if (selectedDept && deptKey) {
+                    if (row[deptKey] !== selectedDept) return false;
+                }
+
+                // 2. Filtrar por palabras clave (todas las palabras deben estar)
+                if (tokens.length > 0) {
+                    // Concatenar todos los valores de la fila en un solo string normalizado
+                    const rowText = normalizeText(
+                        Object.entries(row)
+                            .filter(([key]) => key !== '_origen' && key !== '_clase')
+                            .map(([, val]) => val)
+                            .join(' ')
+                    );
+                    
+                    // .every() asegura que encuentre "yogur", "frutilla", "1" y "l" en cualquier orden
+                    return tokens.every(token => rowText.includes(token));
+                }
+                
+                return true;
+            });
+
+            const totalFound = filtered.length;
+            const MAX_RESULTS = 100; // Límite para no congelar el navegador
+            
+            if (totalFound === 0) {
+                resultsInfo.innerHTML = 'No se encontraron coincidencias.';
+                return;
+            }
+
+            // Mostrar conteo de resultados
+            let infoText = `Se encontraron ${totalFound} resultados.`;
+            if (totalFound > MAX_RESULTS) {
+                infoText += ` Mostrando los primeros ${MAX_RESULTS}.`;
+                filtered = filtered.slice(0, MAX_RESULTS);
+            }
+            resultsInfo.innerHTML = infoText;
+
+            // Renderizar resultados
+            const fragment = document.createDocumentFragment();
+            filtered.forEach(row => {
+                const card = document.createElement('div');
+                card.className = 'result-card';
+
+                const tag = document.createElement('span');
+                tag.className = 'tag ' + row._clase;
+                tag.innerText = row._origen;
+                card.appendChild(tag);
+
+                const rowData = document.createElement('div');
+                rowData.className = 'row-data';
+
+                for (const key in row) {
+                    if (key !== '_origen' && key !== '_clase' && row[key] && String(row[key]).trim() !== '') {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+                        cell.innerHTML = '<strong>' + key + '</strong> ' + row[key];
+                        rowData.appendChild(cell);
+                    }
+                }
+                
+                card.appendChild(rowData);
+                fragment.appendChild(card);
+            });
+            
+            resultsContainer.appendChild(fragment);
+        }
+
+        window.onload = loadData;
+    </script>
+</body>
+</html>
+
+buscador_avanzado.html
+Mostrando buscador_avanzado.html.
