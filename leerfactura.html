@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Procesador de Facturas a XLS</title>
+    <!-- Librerías necesarias mediante CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: system-ui; max-width: 800px; margin: 2rem auto; }
+        .panel { border: 1px solid #ccc; padding: 1rem; border-radius: 8px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    </style>
+</head>
+<body>
+
+    <div class="panel">
+        <h2>Cargar Factura de Compra</h2>
+        <input type="file" id="invoiceImage" accept="image/*" capture="environment">
+        <button onclick="procesarFactura()">Procesar Factura (OCR)</button>
+        <p id="status">Esperando acción...</p>
+    </div>
+
+    <h3>Datos a Exportar</h3>
+    <table id="previewTable">
+        <thead>
+            <tr>
+                <th>CODIGO</th><th>NOMBRE</th><th>P COSTO</th><th>P VENTA</th>
+            </tr>
+        </thead>
+        <tbody id="previewBody"></tbody>
+    </table>
+    
+    <br>
+    <button onclick="exportarExcel()">Descargar IMPORTAR PRODUCTOS.xls</button>
+
+    <script>
+        const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQXw6JguUct7dv50KyEPEQMqPD-WtOrBlfnWuMV_Yx91v5ty1YmNNXzZ9G-YPYlBw/pub?output=csv";
+        let baseDatosCSV = [];
+        let productosProcesados = [];
+
+        // 1. Cargar la base de datos de Google Sheets al iniciar
+        Papa.parse(CSV_URL, {
+            download: true,
+            header: true,
+            complete: function(results) {
+                baseDatosCSV = results.data;
+                console.log("Base de datos cargada:", baseDatosCSV.length, "registros");
+            }
+        });
+
+        // 2. Función principal de OCR y procesamiento
+        async function procesarFactura() {
+            const imageInput = document.getElementById('invoiceImage');
+            const statusLabel = document.getElementById('status');
+
+            if (!imageInput.files[0]) return alert("Sube o toma una foto primero.");
+            
+            statusLabel.innerText = "Leyendo imagen con OCR (esto puede tomar unos segundos)...";
+            
+            try {
+                const worker = await Tesseract.createWorker('spa');
+                const ret = await worker.recognize(imageInput.files[0]);
+                const textoExtraido = ret.data.text;
+                await worker.terminate();
+
+                statusLabel.innerText = "Imagen procesada. Analizando líneas...";
+                analizarLineasFactura(textoExtraido);
+
+            } catch (error) {
+                statusLabel.innerText = "Error en OCR: " + error;
+            }
+        }
+
+        // 3. Análisis de texto y validación manual
+        function analizarLineasFactura(texto) {
+            const lineas = texto.split('\n').filter(l => l.trim().length > 5);
+            productosProcesados = [];
+
+            lineas.forEach(linea => {
+                // AQUÍ: Ajustar expresión regular según el formato de la factura del proveedor
+                // Ejemplo simple asumiendo: [Nombre del producto] [Precio Costo]
+                // Esto requerirá personalización profunda según la factura.
+                let nombreAprox = linea.replace(/[0-9$,]/g, '').trim(); 
+                let costoMatch = linea.match(/\d+[\.,]\d{2}/);
+                let costoUnitario = costoMatch ? parseFloat(costoMatch[0].replace(',', '.')) : 0;
+
+                if(nombreAprox.length < 3) return;
+
+                // Buscar coincidencia en la base de datos cargada
+                let coincidencia = baseDatosCSV.find(item => 
+                    item.NOMBRE && item.NOMBRE.toUpperCase().includes(nombreAprox.toUpperCase())
+                );
+
+                let codigo = "";
+                let nombreFinal = nombreAprox;
+
+                if (coincidencia) {
+                    codigo = coincidencia.CODIGO || coincidencia.CODEBAR;
+                    nombreFinal = coincidencia.NOMBRE;
+                } else {
+                    // INTERVENCIÓN DEL OPERADOR: No se encontró coincidencia segura
+                    codigo = prompt(`⚠️ Sistema: No se encontró código para el artículo: "${nombreAprox}".\n\nPor favor, ingrese el código de barras o código interno manualmente:`);
+                    
+                    if (!codigo || codigo.trim() === "") {
+                        codigo = "SIN_CODIGO"; // Valor por defecto si el operador cancela
+                    }
+                }
+
+                // Cálculos comerciales básicos
+                let margenNormal = 1.45; // 45% de recargo
+                let margenMayoreo = 1.25; // 25% de recargo
+                let precioVenta = costoUnitario * margenNormal;
+                let precioMayoreo = costoUnitario * margenMayoreo;
+
+                // Estructurar según IMPORTAR PRODUCTOS.xls
+                productosProcesados.push({
+                    'CODIGO': codigo,
+                    'CODEBAR': `*${codigo}*`,
+                    'NOMBRE': nombreFinal,
+                    'P COSTO': costoUnitario.toFixed(2),
+                    'P VENTA': `$${precioVenta.toFixed(2)}`,
+                    'P MAYOREO': precioMayoreo.toFixed(2),
+                    'DEPARTAMENTO': 'KIMAR', // O solicitar/mapear según el CSV
+                    'INVENTARIO': 5, // Valor dinámico según factura si indica cantidad
+                    'IN MINIMO': 0
+                });
+            });
+
+            actualizarVistaPrevia();
+            document.getElementById('status').innerText = "Procesamiento completo. Revise los datos y exporte.";
+        }
+
+        // 4. Actualizar tabla HTML
+        function actualizarVistaPrevia() {
+            const tbody = document.getElementById('previewBody');
+            tbody.innerHTML = '';
+            productosProcesados.forEach(prod => {
+                tbody.innerHTML += `<tr>
+                    <td>${prod['CODIGO']}</td>
+                    <td>${prod['NOMBRE']}</td>
+                    <td>${prod['P COSTO']}</td>
+                    <td>${prod['P VENTA']}</td>
+                </tr>`;
+            });
+        }
+
+        // 5. Exportar a IMPORTAR PRODUCTOS.xls utilizando SheetJS
+        function exportarExcel() {
+            if (productosProcesados.length === 0) return alert("No hay datos para exportar.");
+            
+            const hoja = XLSX.utils.json_to_sheet(productosProcesados);
+            const libro = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(libro, hoja, "PRODUCTOS");
+            
+            XLSX.writeFile(libro, "IMPORTAR PRODUCTOS.xls");
+        }
+    </script>
+</body>
+</html>
