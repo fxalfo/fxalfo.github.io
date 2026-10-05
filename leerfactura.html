@@ -60,10 +60,17 @@
             
             statusLabel.innerText = "Leyendo imagen con OCR (esto puede tomar unos segundos)...";
             
-            try {
-                const worker = await Tesseract.createWorker('spa');
+           try {
+                // Inicialización explícita recomendada para Tesseract.js v4+
+                const worker = await Tesseract.createWorker({
+                    logger: m => console.log(m) // Opcional: ver progreso en consola
+                });
+                await worker.loadLanguage('spa');
+                await worker.initialize('spa');
+                
                 const ret = await worker.recognize(imageInput.files[0]);
                 const textoExtraido = ret.data.text;
+                
                 await worker.terminate();
 
                 statusLabel.innerText = "Imagen procesada. Analizando líneas...";
