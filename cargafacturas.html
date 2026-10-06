@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prototipo POS - Carga de Facturas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Quitar flechas a los inputs de número para que se vea más limpio */
+        input[type="number"]::-webkit-inner-spin-button, 
+        input[type="number"]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-8 font-sans">
+    <div class="max-w-6xl mx-auto bg-white rounded-lg shadow-md p-6">
+        <h1 class="text-2xl font-bold mb-6 text-gray-800">Carga de Mercadería (Offline-First)</h1>
+        
+        <!-- Cabecera Factura -->
+        <div class="bg-blue-50 p-4 rounded-md mb-6 border border-blue-200">
+            <h2 class="text-lg font-semibold text-blue-800 mb-3">1. Ingresa los totales del pie de factura</h2>
+            <div class="flex flex-wrap gap-4 items-end">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Neto Gravado ($)</label>
+                    <input type="number" id="facturaNeto" value="247281.33" class="mt-1 block w-40 rounded-md border-gray-300 shadow-sm p-2 border focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Total a Pagar ($)</label>
+                    <input type="number" id="facturaTotal" value="306628.85" class="mt-1 block w-40 rounded-md border-gray-300 shadow-sm p-2 border focus:border-blue-500 focus:outline-none">
+                </div>
+                <div class="pb-2">
+                    <span class="text-sm text-gray-600">Coeficiente Impositivo Calculado:</span>
+                    <span id="coeficienteTag" class="font-bold text-blue-700 bg-blue-100 px-3 py-1 rounded ml-2">1.2400</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grilla Productos -->
+        <div>
+            <h2 class="text-lg font-semibold text-gray-800 mb-3">2. Detalle de Productos</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 border">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto (Opcional)</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cantidad</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Importe Línea ($)</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-blue-600 uppercase bg-blue-50">Costo Unitario Real</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Margen (%)</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-green-700 uppercase bg-green-100">Precio Final ($)</th>
+                            <th class="px-4 py-3"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaProductos" class="bg-white divide-y divide-gray-200">
+                        <!-- Las filas se inyectan acá mediante JS -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-4 flex justify-between items-center">
+                <button onclick="agregarFila()" class="bg-gray-800 text-white px-4 py-2 rounded shadow hover:bg-gray-700 transition">+ Agregar Fila Vacía</button>
+                <p class="text-sm text-gray-500 italic">* El precio final se redondea automáticamente a la decena superior.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let filaCount = 0;
+
+        // Calcula el coeficiente (Total / Neto) en vivo
+        function actualizarCoeficiente() {
+            const neto = parseFloat(document.getElementById('facturaNeto').value) || 0;
+            const total = parseFloat(document.getElementById('facturaTotal').value) || 0;
+            
+            let coeficiente = 1;
+            if (neto > 0) {
+                coeficiente = total / neto;
+            }
+            
+            document.getElementById('coeficienteTag').innerText = coeficiente.toFixed(4);
+            recalcularTabla(); // Si cambia la factura, cambian todos los costos
+        }
+
+        // Calcula el costo y precio de una sola línea
+        function recalcularFila(id) {
+            const coeficiente = parseFloat(document.getElementById('coeficienteTag').innerText);
+            
+            const cantidad = parseFloat(document.getElementById(`cant_${id}`).value) || 0;
+            const importe = parseFloat(document.getElementById(`imp_${id}`).value) || 0;
+            const margen = parseFloat(document.getElementById(`margen_${id}`).value) || 0;
+            
+            let costoReal = 0;
+            if (cantidad > 0) {
+                costoReal = (importe * coeficiente) / cantidad;
+            }
+            
+            // Mostrar costo
+            document.getElementById(`costo_${id}`).innerText = `$${costoReal.toFixed(2)}`;
+            
+            // Calcular precio de venta
+            const precioVenta = costoReal * (1 + (margen / 100));
+            // Redondeo comercial (siempre hacia arriba al múltiplo de 10 más cercano)
+            const precioRedondeado = Math.ceil(precioVenta / 10) * 10;
+            
+            document.getElementById(`precio_${id}`).innerText = `$${precioRedondeado.toFixed(2)}`;
+        }
+
+        // Recorre todas las filas para recalcular
+        function recalcularTabla() {
+            const filas = document.querySelectorAll('.fila-producto');
+            filas.forEach(fila => {
+                const id = fila.getAttribute('data-id');
+                recalcularFila(id);
+            });
+        }
+
+        // Agrega una nueva fila al DOM
+        function agregarFila(producto = '', cantidad = '', importe = '', margen = 40) {
+            filaCount++;
+            const id = filaCount;
+            
+            const tr = document.createElement('tr');
+            tr.className = 'fila-producto hover:bg-gray-50 transition';
+            tr.setAttribute('data-id', id);
+            
+            tr.innerHTML = `
+                <td class="px-4 py-2"><input type="text" placeholder="Ej. Lays Clasicas" value="${producto}" class="w-full p-2 border rounded focus:outline-none focus:border-blue-400"></td>
+                <td class="px-4 py-2"><input type="number" id="cant_${id}" value="${cantidad}" oninput="recalcularFila(${id})" class="w-20 p-2 border rounded text-right focus:outline-none focus:border-blue-400"></td>
+                <td class="px-4 py-2"><input type="number" id="imp_${id}" value="${importe}" oninput="recalcularFila(${id})" class="w-28 p-2 border rounded text-right focus:outline-none focus:border-blue-400"></td>
+                <td class="px-4 py-2 font-bold text-blue-700 bg-blue-50 text-right" id="costo_${id}">$0.00</td>
+                <td class="px-4 py-2">
+                    <div class="flex items-center">
+                        <input type="number" id="margen_${id}" value="${margen}" oninput="recalcularFila(${id})" class="w-16 p-2 border rounded text-right focus:outline-none focus:border-blue-400">
+                        <span class="ml-1 text-gray-500 font-bold">%</span>
+                    </div>
+                </td>
+                <td class="px-4 py-2 font-bold text-green-700 bg-green-100 text-xl text-right" id="precio_${id}">$0.00</td>
+                <td class="px-4 py-2 text-center">
+                    <button onclick="this.closest('tr').remove(); recalcularTabla();" class="text-red-400 hover:text-red-700 font-bold text-xl px-2">&times;</button>
+                </td>
+            `;
+            
+            document.getElementById('tablaProductos').appendChild(tr);
+            recalcularFila(id); // Calcular esta fila inicial
+        }
+
+        // Listeners para la cabecera
+        document.getElementById('facturaNeto').addEventListener('input', actualizarCoeficiente);
+        document.getElementById('facturaTotal').addEventListener('input', actualizarCoeficiente);
+
+        // --- INICIALIZACIÓN ---
+        actualizarCoeficiente();
+        
+        // Cargamos 3 filas de tu factura como ejemplo:
+        agregarFila('CHEETOS QUESO 85GX24X1', 5, 10330.15, 35);
+        agregarFila('LAYS CLASICAS 85GX25X1', 20, 41320.60, 35);
+        agregarFila('DORITOS QUESO 200GX14', 1, 4899.65, 35);
+    </script>
+</body>
+</html>
