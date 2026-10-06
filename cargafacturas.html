@@ -3,86 +3,156 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototipo POS - Carga de Facturas</title>
+    <title>Prototipo POS - Carga con Escáner y DB</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Quitar flechas a los inputs de número para que se vea más limpio */
         input[type="number"]::-webkit-inner-spin-button, 
         input[type="number"]::-webkit-outer-spin-button { 
             -webkit-appearance: none; 
             margin: 0; 
         }
+        /* Animación suave para cuando encuentra un producto */
+        .flash-green {
+            animation: flashGreen 1s ease-out;
+        }
+        @keyframes flashGreen {
+            0% { background-color: #bbf7d0; }
+            100% { background-color: transparent; }
+        }
     </style>
 </head>
 <body class="bg-gray-100 p-8 font-sans">
-    <div class="max-w-6xl mx-auto bg-white rounded-lg shadow-md p-6">
-        <h1 class="text-2xl font-bold mb-6 text-gray-800">Carga de Mercadería (Offline-First)</h1>
+    <div class="max-w-7xl mx-auto bg-white rounded-lg shadow-md p-6">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold text-gray-800">Carga de Mercadería (Con Escáner)</h1>
+            <div id="dbStatus" class="text-sm font-medium px-3 py-1 bg-yellow-100 text-yellow-800 rounded animate-pulse">
+                ⏳ Conectando con Google Sheets...
+            </div>
+        </div>
         
         <!-- Cabecera Factura -->
         <div class="bg-blue-50 p-4 rounded-md mb-6 border border-blue-200">
-            <h2 class="text-lg font-semibold text-blue-800 mb-3">1. Ingresa los totales del pie de factura</h2>
-            <div class="flex flex-wrap gap-4 items-end">
+            <h2 class="text-lg font-semibold text-blue-800 mb-3">1. Totales de Factura</h2>
+            <div class="flex flex-wrap gap-6 items-end">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Neto Gravado ($)</label>
-                    <input type="number" id="facturaNeto" value="247281.33" class="mt-1 block w-40 rounded-md border-gray-300 shadow-sm p-2 border focus:border-blue-500 focus:outline-none">
+                    <label class="block text-sm font-medium text-gray-700">Total a Pagar (Factura Completa)</label>
+                    <input type="number" id="facturaTotal" placeholder="Ej: 306628.85" class="mt-1 block w-48 rounded-md border-gray-300 shadow-sm p-3 border-2 focus:border-blue-500 focus:outline-none text-lg font-bold">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Total a Pagar ($)</label>
-                    <input type="number" id="facturaTotal" value="306628.85" class="mt-1 block w-40 rounded-md border-gray-300 shadow-sm p-2 border focus:border-blue-500 focus:outline-none">
+                    <label class="block text-sm font-medium text-gray-500">Neto Gravado (Calculado Auto.)</label>
+                    <input type="number" id="facturaNeto" value="0" readonly class="mt-1 block w-48 rounded-md border-gray-200 bg-gray-100 shadow-sm p-3 border focus:outline-none text-lg font-bold text-gray-500 cursor-not-allowed">
                 </div>
                 <div class="pb-2">
-                    <span class="text-sm text-gray-600">Coeficiente Impositivo Calculado:</span>
-                    <span id="coeficienteTag" class="font-bold text-blue-700 bg-blue-100 px-3 py-1 rounded ml-2">1.2400</span>
+                    <span class="text-sm text-gray-600 block mb-1">Coeficiente Impositivo:</span>
+                    <span id="coeficienteTag" class="font-bold text-blue-700 bg-blue-100 px-4 py-2 rounded text-lg">1.0000</span>
                 </div>
             </div>
+            <p class="text-xs text-blue-600 mt-2 italic">* El Neto Gravado se calcula solo al sumar los importes de cada línea. Ingresa únicamente el Total que pagaste al proveedor.</p>
         </div>
 
         <!-- Grilla Productos -->
         <div>
-            <h2 class="text-lg font-semibold text-gray-800 mb-3">2. Detalle de Productos</h2>
+            <h2 class="text-lg font-semibold text-gray-800 mb-3">2. Escaneo y Detalle de Productos</h2>
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200 border">
-                    <thead class="bg-gray-50">
+                    <thead class="bg-gray-800">
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto (Opcional)</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cantidad</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Importe Línea ($)</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-blue-600 uppercase bg-blue-50">Costo Unitario Real</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Margen (%)</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-green-700 uppercase bg-green-100">Precio Final ($)</th>
-                            <th class="px-4 py-3"></th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-100 uppercase">Cód. Barras</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-100 uppercase w-1/4">Producto</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-100 uppercase">Cantidad</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-100 uppercase">Importe Línea ($)</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-blue-300 uppercase">Costo Real</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-100 uppercase">Margen (%)</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-green-400 uppercase">Precio Final ($)</th>
+                            <th class="px-2 py-3"></th>
                         </tr>
                     </thead>
                     <tbody id="tablaProductos" class="bg-white divide-y divide-gray-200">
-                        <!-- Las filas se inyectan acá mediante JS -->
+                        <!-- Las filas se inyectan acá -->
                     </tbody>
                 </table>
             </div>
             <div class="mt-4 flex justify-between items-center">
-                <button onclick="agregarFila()" class="bg-gray-800 text-white px-4 py-2 rounded shadow hover:bg-gray-700 transition">+ Agregar Fila Vacía</button>
-                <p class="text-sm text-gray-500 italic">* El precio final se redondea automáticamente a la decena superior.</p>
+                <button onclick="agregarFila()" class="bg-gray-800 text-white px-4 py-2 rounded shadow hover:bg-gray-700 transition font-bold">+ Agregar Fila Manual</button>
             </div>
         </div>
     </div>
 
     <script>
+        // --- 1. LÓGICA DE BASE DE DATOS (GOOGLE SHEETS) ---
+        let baseDeDatos = [];
+
+        async function inicializarBaseDatos() {
+            const url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQXw6JguUct7dv50KyEPEQMqPD-WtOrBlfnWuMV_Yx91v5ty1YmNNXzZ9G-YPYlBw/pub?output=csv';
+            try {
+                const response = await fetch(url);
+                const text = await response.text();
+                parsearCSV(text);
+                
+                const statusDiv = document.getElementById('dbStatus');
+                statusDiv.className = 'text-sm font-bold px-3 py-1 bg-green-100 text-green-800 rounded';
+                statusDiv.innerHTML = `✓ DB Conectada (${baseDeDatos.length} items)`;
+            } catch (error) {
+                const statusDiv = document.getElementById('dbStatus');
+                statusDiv.className = 'text-sm font-bold px-3 py-1 bg-red-100 text-red-800 rounded';
+                statusDiv.innerHTML = '✗ Error de conexión con Sheets';
+                console.error("Error cargando CSV:", error);
+            }
+        }
+
+        function parsearCSV(str) {
+            const lineas = str.split('\n');
+            baseDeDatos = [];
+            
+            // Iteramos ignorando la fila 0 (cabeceras)
+            for (let i = 1; i < lineas.length; i++) {
+                if (!lineas[i].trim()) continue;
+                
+                // Función básica para separar por comas ignorando las comas dentro de comillas
+                let cols = [];
+                let curr = '';
+                let inQuote = false;
+                for(let char of lineas[i]) {
+                    if (char === '"') inQuote = !inQuote;
+                    else if (char === ',' && !inQuote) { cols.push(curr); curr = ''; }
+                    else curr += char;
+                }
+                cols.push(curr);
+
+                baseDeDatos.push({
+                    codigo: cols[0] ? cols[0].trim() : '',
+                    descripcion: cols[1] ? cols[1].trim() : ''
+                });
+            }
+        }
+
+        // --- 2. LÓGICA DE CÁLCULO Y VISTA ---
         let filaCount = 0;
 
-        // Calcula el coeficiente (Total / Neto) en vivo
+        function recalcularSumaNeto() {
+            let sumaNeto = 0;
+            const inputsImporte = document.querySelectorAll('.input-importe');
+            inputsImporte.forEach(input => {
+                sumaNeto += parseFloat(input.value) || 0;
+            });
+            
+            document.getElementById('facturaNeto').value = sumaNeto.toFixed(2);
+            actualizarCoeficiente();
+        }
+
         function actualizarCoeficiente() {
             const neto = parseFloat(document.getElementById('facturaNeto').value) || 0;
             const total = parseFloat(document.getElementById('facturaTotal').value) || 0;
             
             let coeficiente = 1;
-            if (neto > 0) {
+            if (neto > 0 && total > 0) {
                 coeficiente = total / neto;
             }
             
             document.getElementById('coeficienteTag').innerText = coeficiente.toFixed(4);
-            recalcularTabla(); // Si cambia la factura, cambian todos los costos
+            recalcularTabla();
         }
 
-        // Calcula el costo y precio de una sola línea
         function recalcularFila(id) {
             const coeficiente = parseFloat(document.getElementById('coeficienteTag').innerText);
             
@@ -95,28 +165,49 @@
                 costoReal = (importe * coeficiente) / cantidad;
             }
             
-            // Mostrar costo
             document.getElementById(`costo_${id}`).innerText = `$${costoReal.toFixed(2)}`;
             
-            // Calcular precio de venta
             const precioVenta = costoReal * (1 + (margen / 100));
-            // Redondeo comercial (siempre hacia arriba al múltiplo de 10 más cercano)
             const precioRedondeado = Math.ceil(precioVenta / 10) * 10;
             
             document.getElementById(`precio_${id}`).innerText = `$${precioRedondeado.toFixed(2)}`;
         }
 
-        // Recorre todas las filas para recalcular
         function recalcularTabla() {
             const filas = document.querySelectorAll('.fila-producto');
-            filas.forEach(fila => {
-                const id = fila.getAttribute('data-id');
-                recalcularFila(id);
-            });
+            filas.forEach(fila => recalcularFila(fila.getAttribute('data-id')));
         }
 
-        // Agrega una nueva fila al DOM
-        function agregarFila(producto = '', cantidad = '', importe = '', margen = 40) {
+        // --- 3. LÓGICA DE ESCÁNER Y EVENTOS ---
+        function manejarEscaner(e, id) {
+            // Reaccionar al presionar Enter (comportamiento de escáner)
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                buscarEnDb(id);
+            }
+        }
+
+        function buscarEnDb(id) {
+            const inputCodigo = document.getElementById(`codigo_${id}`);
+            const codigo = inputCodigo.value.trim();
+            if (!codigo) return;
+
+            const productoEncontrado = baseDeDatos.find(p => p.codigo === codigo || p.codigo === codigo.replace(/^0+/, ''));
+
+            if (productoEncontrado) {
+                document.getElementById(`desc_${id}`).value = productoEncontrado.descripcion;
+                
+                // Feedback visual en la fila
+                inputCodigo.parentElement.classList.add('flash-green');
+                setTimeout(() => inputCodigo.parentElement.classList.remove('flash-green'), 1000);
+                
+                // Mover foco a la cantidad automáticamente
+                document.getElementById(`cant_${id}`).focus();
+            }
+            // Si el escáner detectó un código, pero no estaba en la DB, dejamos el campo descripción vacío para que lo cargue a mano.
+        }
+
+        function agregarFila(codigo = '', descripcion = '', cantidad = '', importe = '', margen = 40) {
             filaCount++;
             const id = filaCount;
             
@@ -125,37 +216,50 @@
             tr.setAttribute('data-id', id);
             
             tr.innerHTML = `
-                <td class="px-4 py-2"><input type="text" placeholder="Ej. Lays Clasicas" value="${producto}" class="w-full p-2 border rounded focus:outline-none focus:border-blue-400"></td>
-                <td class="px-4 py-2"><input type="number" id="cant_${id}" value="${cantidad}" oninput="recalcularFila(${id})" class="w-20 p-2 border rounded text-right focus:outline-none focus:border-blue-400"></td>
-                <td class="px-4 py-2"><input type="number" id="imp_${id}" value="${importe}" oninput="recalcularFila(${id})" class="w-28 p-2 border rounded text-right focus:outline-none focus:border-blue-400"></td>
-                <td class="px-4 py-2 font-bold text-blue-700 bg-blue-50 text-right" id="costo_${id}">$0.00</td>
-                <td class="px-4 py-2">
-                    <div class="flex items-center">
-                        <input type="number" id="margen_${id}" value="${margen}" oninput="recalcularFila(${id})" class="w-16 p-2 border rounded text-right focus:outline-none focus:border-blue-400">
+                <td class="px-2 py-2">
+                    <input type="text" id="codigo_${id}" value="${codigo}" placeholder="Escanear..." 
+                        onkeydown="manejarEscaner(event, ${id})" onblur="buscarEnDb(${id})"
+                        class="w-32 p-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono text-sm bg-gray-50">
+                </td>
+                <td class="px-2 py-2">
+                    <input type="text" id="desc_${id}" value="${descripcion}" placeholder="Nombre del producto" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500">
+                </td>
+                <td class="px-2 py-2">
+                    <input type="number" id="cant_${id}" value="${cantidad}" oninput="recalcularFila(${id})" class="w-20 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500">
+                </td>
+                <td class="px-2 py-2">
+                    <input type="number" id="imp_${id}" value="${importe}" oninput="recalcularSumaNeto()" class="input-importe w-28 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500 font-semibold text-blue-900 bg-blue-50">
+                </td>
+                <td class="px-2 py-2 font-bold text-blue-700 bg-blue-50 text-right rounded-md border-r-2 border-white" id="costo_${id}">$0.00</td>
+                <td class="px-2 py-2">
+                    <div class="flex items-center justify-end">
+                        <input type="number" id="margen_${id}" value="${margen}" oninput="recalcularFila(${id})" class="w-16 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500">
                         <span class="ml-1 text-gray-500 font-bold">%</span>
                     </div>
                 </td>
-                <td class="px-4 py-2 font-bold text-green-700 bg-green-100 text-xl text-right" id="precio_${id}">$0.00</td>
-                <td class="px-4 py-2 text-center">
-                    <button onclick="this.closest('tr').remove(); recalcularTabla();" class="text-red-400 hover:text-red-700 font-bold text-xl px-2">&times;</button>
+                <td class="px-2 py-2 font-bold text-green-700 bg-green-100 text-xl text-right rounded-md" id="precio_${id}">$0.00</td>
+                <td class="px-2 py-2 text-center">
+                    <button onclick="this.closest('tr').remove(); recalcularSumaNeto();" class="text-red-400 hover:text-red-700 font-bold text-xl px-2">&times;</button>
                 </td>
             `;
             
             document.getElementById('tablaProductos').appendChild(tr);
-            recalcularFila(id); // Calcular esta fila inicial
+            recalcularFila(id);
+            
+            // Foco inicial en el nuevo código de barras si fue agregada manualmente
+            if (!codigo) {
+                setTimeout(() => document.getElementById(`codigo_${id}`).focus(), 10);
+            }
         }
 
-        // Listeners para la cabecera
-        document.getElementById('facturaNeto').addEventListener('input', actualizarCoeficiente);
-        document.getElementById('facturaTotal').addEventListener('input', actualizarCoeficiente);
-
         // --- INICIALIZACIÓN ---
-        actualizarCoeficiente();
+        document.getElementById('facturaTotal').addEventListener('input', actualizarCoeficiente);
         
-        // Cargamos 3 filas de tu factura como ejemplo:
-        agregarFila('CHEETOS QUESO 85GX24X1', 5, 10330.15, 35);
-        agregarFila('LAYS CLASICAS 85GX25X1', 20, 41320.60, 35);
-        agregarFila('DORITOS QUESO 200GX14', 1, 4899.65, 35);
+        // 1. Iniciamos conexión con Google Sheets
+        inicializarBaseDatos();
+        
+        // 2. Agregamos una fila vacía para que el operador empiece a escanear directamente
+        agregarFila();
     </script>
 </body>
 </html>
