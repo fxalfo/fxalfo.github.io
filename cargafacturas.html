@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototipo POS - Exportación Formateada</title>
+    <title>Prototipo POS - Carga Facturas (Final)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         input[type="number"]::-webkit-inner-spin-button, 
@@ -23,7 +23,7 @@
 <body class="bg-gray-100 p-8 font-sans">
     <div class="max-w-7xl mx-auto bg-white rounded-lg shadow-md p-6">
         <div class="flex justify-between items-center mb-6">
-            <h1 class="text-2xl font-bold text-gray-800">Carga de Mercadería (Exportación Formateada)</h1>
+            <h1 class="text-2xl font-bold text-gray-800">Carga de Mercadería (Exportación POS)</h1>
             <div class="flex space-x-3">
                 <div id="dbStatus" class="text-sm font-medium px-3 py-2 bg-yellow-100 text-yellow-800 rounded flex items-center">
                     ⏳ Conectando DB...
@@ -52,7 +52,6 @@
                     <input type="number" id="facturaNeto" value="0" readonly class="mt-1 block w-40 rounded-md border-gray-200 bg-gray-100 shadow-sm p-3 border focus:outline-none text-lg font-bold text-gray-500 cursor-not-allowed">
                 </div>
                 
-                <!-- NUEVO CAMPO DEPARTAMENTO / PROVEEDOR -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Proveedor / Departamento</label>
                     <select id="proveedorSelect" class="mt-1 block w-64 rounded-md border-gray-300 shadow-sm p-3 border-2 focus:border-blue-500 focus:outline-none text-lg font-bold bg-white text-gray-800">
@@ -96,7 +95,6 @@
     </div>
 
     <script>
-        // --- 1. LÓGICA DE BASE DE DATOS (GOOGLE SHEETS) ---
         let baseDeDatos = [];
 
         async function inicializarBaseDatos() {
@@ -117,7 +115,6 @@
             }
         }
 
-        // Función robusta para leer líneas CSV (maneja comas dentro de comillas)
         function parseCSVLine(line) {
             let cols = [];
             let curr = '';
@@ -138,11 +135,8 @@
             
             if(lineas.length === 0) return;
             
-            // Buscar dinámicamente en qué columna está el "DEPARTAMENTO"
             let headers = parseCSVLine(lineas[0]);
             let colDeptoIndex = headers.findIndex(h => h.toUpperCase().includes('DEPARTAMENTO') || h.toUpperCase().includes('PROVEEDOR') || h.toUpperCase() === 'DEPTO');
-            
-            // Si no lo encuentra por nombre en la cabecera, asumimos la columna 6 como en tu exportación estándar
             if (colDeptoIndex === -1) colDeptoIndex = 6; 
             
             for (let i = 1; i < lineas.length; i++) {
@@ -150,7 +144,6 @@
                 
                 let cols = parseCSVLine(lineas[i]);
                 
-                // Recolectar departamentos para el select
                 let depto = cols[colDeptoIndex] ? cols[colDeptoIndex].trim() : '';
                 if(depto) departamentosUnicos.add(depto);
 
@@ -160,11 +153,9 @@
                 });
             }
             
-            // Llenar el menú desplegable (Select)
             const select = document.getElementById('proveedorSelect');
             let deptosArray = Array.from(departamentosUnicos).sort();
             deptosArray.forEach(depto => {
-                // Evitamos duplicar "GENERAL" si ya viene en la DB
                 if(depto.toUpperCase() !== 'GENERAL' && depto.toUpperCase() !== 'DEPARTAMENTO') {
                     let opt = document.createElement('option');
                     opt.value = depto;
@@ -174,7 +165,6 @@
             });
         }
 
-        // --- 2. LÓGICA DE EXPORTACIÓN Y LIMPIEZA ---
         function limpiarFactura() {
             if(confirm("¿Estás seguro de que deseas limpiar la pantalla? Se perderán los datos que no hayas exportado.")) {
                 document.getElementById('facturaTotal').value = '';
@@ -194,7 +184,6 @@
             <table border="1">
                 <tr>
                     <th style="background-color:#333; color:white;">CODIGO</th>
-                    <th style="background-color:#333; color:white;">CODEBAR</th>
                     <th style="background-color:#333; color:white;">NOMBRE</th>
                     <th style="background-color:#333; color:white;">P COSTO</th>
                     <th style="background-color:#333; color:white;">P VENTA</th>
@@ -207,7 +196,6 @@
             const filas = document.querySelectorAll('.fila-producto');
             let hayDatos = false;
             
-            // Tomamos el departamento seleccionado del menú desplegable
             const deptoSeleccionado = document.getElementById('proveedorSelect').value;
 
             filas.forEach(fila => {
@@ -221,9 +209,8 @@
 
                 if(codigo || desc || parseFloat(imp) > 0) {
                     hayDatos = true;
-                    // Mapeo: Reemplazamos GENERAL por la variable deptoSeleccionado
+                    // Se eliminó CODEBAR de las celdas generadas
                     tablaHTML += `<tr>
-                        <td style="mso-number-format:'\@'">${codigo}</td>
                         <td style="mso-number-format:'\@'">${codigo}</td>
                         <td>${desc}</td>
                         <td>${costoText.replace('.', ',')}</td>
@@ -256,7 +243,6 @@
             document.body.removeChild(link);
         }
 
-        // --- 3. LÓGICA DE CÁLCULO Y VISTA ---
         let filaCount = 0;
 
         function recalcularSumaNeto() {
@@ -376,7 +362,6 @@
             }
         }
 
-        // --- INICIALIZACIÓN ---
         document.getElementById('facturaTotal').addEventListener('input', actualizarCoeficiente);
         
         inicializarBaseDatos();
