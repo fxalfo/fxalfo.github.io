@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototipo POS - Carga Facturas (Final)</title>
+    <title>Prototipo POS - Carga Facturas (Actualizado)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         input[type="number"]::-webkit-inner-spin-button, 
@@ -90,6 +90,7 @@
             </div>
             <div class="mt-4 flex justify-between items-center">
                 <button onclick="agregarFila()" class="bg-gray-800 text-white px-4 py-2 rounded shadow hover:bg-gray-700 transition font-bold">+ Agregar Fila Manual</button>
+                <p class="text-sm text-gray-500 italic">* El precio final se redondea automáticamente a la centena superior (ej: $1500, $1600).</p>
             </div>
         </div>
     </div>
@@ -209,13 +210,13 @@
 
                 if(codigo || desc || parseFloat(imp) > 0) {
                     hayDatos = true;
-                    // Se eliminó CODEBAR de las celdas generadas
+                    // Se agregó el valor "0" por defecto para P MAYOREO
                     tablaHTML += `<tr>
                         <td style="mso-number-format:'\@'">${codigo}</td>
                         <td>${desc}</td>
                         <td>${costoText.replace('.', ',')}</td>
                         <td>${precioText.replace('.', ',')}</td>
-                        <td></td>
+                        <td>0</td>
                         <td>${deptoSeleccionado}</td>
                         <td>${cant}</td>
                         <td>1</td>
@@ -235,8 +236,17 @@
             const link = document.createElement("a");
             link.href = url;
             
-            const fechaHora = new Date().toISOString().replace(/T/, '_').replace(/\..+/, '').replace(/:/g, '-');
-            link.download = `Importacion_${deptoSeleccionado}_${fechaHora}.xls`;
+            // Obtener fecha y hora de Argentina (Buenos Aires)
+            const dateBA = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Argentina/Buenos_Aires"}));
+            const anio = dateBA.getFullYear();
+            const mes = String(dateBA.getMonth() + 1).padStart(2, '0');
+            const dia = String(dateBA.getDate()).padStart(2, '0');
+            const hora = String(dateBA.getHours()).padStart(2, '0');
+            const minuto = String(dateBA.getMinutes()).padStart(2, '0');
+            const segundo = String(dateBA.getSeconds()).padStart(2, '0');
+            
+            const fechaHoraBA = `${anio}-${mes}-${dia}_${hora}-${minuto}-${segundo}`;
+            link.download = `Importacion_${deptoSeleccionado}_${fechaHoraBA}.xls`;
             
             document.body.appendChild(link);
             link.click();
@@ -284,7 +294,8 @@
             document.getElementById(`costo_${id}`).innerText = `$${costoReal.toFixed(2)}`;
             
             const precioVenta = costoReal * (1 + (margen / 100));
-            const precioRedondeado = Math.ceil(precioVenta / 10) * 10;
+            // Redondeo de centenas (ej: a los 100 pesos)
+            const precioRedondeado = Math.ceil(precioVenta / 100) * 100;
             
             document.getElementById(`precio_${id}`).innerText = `$${precioRedondeado.toFixed(2)}`;
         }
