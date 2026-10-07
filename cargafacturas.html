@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototipo POS - Carga y Exportación</title>
+    <title>Prototipo POS - Exportación Formateada</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         input[type="number"]::-webkit-inner-spin-button, 
@@ -23,19 +23,18 @@
 <body class="bg-gray-100 p-8 font-sans">
     <div class="max-w-7xl mx-auto bg-white rounded-lg shadow-md p-6">
         <div class="flex justify-between items-center mb-6">
-            <h1 class="text-2xl font-bold text-gray-800">Carga de Mercadería (Con Escáner y Exportación)</h1>
+            <h1 class="text-2xl font-bold text-gray-800">Carga de Mercadería (Exportación Formateada)</h1>
             <div class="flex space-x-3">
                 <div id="dbStatus" class="text-sm font-medium px-3 py-2 bg-yellow-100 text-yellow-800 rounded flex items-center">
                     ⏳ Conectando DB...
                 </div>
-                <!-- NUEVOS BOTONES -->
                 <button onclick="limpiarFactura()" class="bg-red-100 text-red-700 hover:bg-red-200 px-4 py-2 rounded shadow transition font-bold text-sm flex items-center">
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     Limpiar / Nueva
                 </button>
                 <button onclick="exportarXLS()" class="bg-green-600 text-white hover:bg-green-700 px-4 py-2 rounded shadow transition font-bold text-sm flex items-center">
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                    Exportar a .XLS
+                    Exportar a POS (.XLS)
                 </button>
             </div>
         </div>
@@ -133,7 +132,7 @@
             }
         }
 
-        // --- 2. LÓGICA DE EXPORTACIÓN Y LIMPIEZA (NUEVO) ---
+        // --- 2. LÓGICA DE EXPORTACIÓN Y LIMPIEZA ---
         function limpiarFactura() {
             if(confirm("¿Estás seguro de que deseas limpiar la pantalla? Se perderán los datos que no hayas exportado.")) {
                 document.getElementById('facturaTotal').value = '';
@@ -147,20 +146,19 @@
         }
 
         function exportarXLS() {
-            // Utilizamos una tabla HTML incrustada en un archivo .xls para máxima compatibilidad con Excel local
-            // Esto permite definir que el Código de Barras se trate siempre como texto ("mso-number-format:'\@'") 
-            // evitando que Excel borre los ceros a la izquierda.
             let tablaHTML = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
             <head><meta charset="UTF-8"></head><body>
             <table border="1">
                 <tr>
-                    <th style="background-color:#333; color:white;">Código de Barras</th>
-                    <th style="background-color:#333; color:white;">Descripción</th>
-                    <th style="background-color:#333; color:white;">Cantidad</th>
-                    <th style="background-color:#333; color:white;">Importe Linea ($)</th>
-                    <th style="background-color:#333; color:white;">Costo Unitario Real ($)</th>
-                    <th style="background-color:#333; color:white;">Margen (%)</th>
-                    <th style="background-color:#333; color:white;">Precio de Venta Sugerido ($)</th>
+                    <th style="background-color:#333; color:white;">CODIGO</th>
+                    <th style="background-color:#333; color:white;">CODEBAR</th>
+                    <th style="background-color:#333; color:white;">NOMBRE</th>
+                    <th style="background-color:#333; color:white;">P COSTO</th>
+                    <th style="background-color:#333; color:white;">P VENTA</th>
+                    <th style="background-color:#333; color:white;">P MAYOREO</th>
+                    <th style="background-color:#333; color:white;">DEPARTAMENTO</th>
+                    <th style="background-color:#333; color:white;">INVENTARIO</th>
+                    <th style="background-color:#333; color:white;">IN MINIMO</th>
                 </tr>`;
 
             const filas = document.querySelectorAll('.fila-producto');
@@ -173,21 +171,24 @@
                 const cant = document.getElementById(`cant_${id}`).value || 0;
                 const imp = document.getElementById(`imp_${id}`).value || 0;
                 const costoText = document.getElementById(`costo_${id}`).innerText.replace('$', '').trim();
-                const margen = document.getElementById(`margen_${id}`).value || 0;
                 const precioText = document.getElementById(`precio_${id}`).innerText.replace('$', '').trim();
 
-                // Exportamos solo filas que tengan algún dato
                 if(codigo || desc || parseFloat(imp) > 0) {
                     hayDatos = true;
-                    // Reemplazamos los puntos por comas en los números para que el Excel en español los lea correctamente como decimales
+                    // Mapeo: CODIGO y CODEBAR usan el mismo código de barras escaneado
+                    // P MAYOREO lo dejamos en blanco para que lo llenen luego o lo calcule el sistema destino
+                    // DEPARTAMENTO por defecto "GENERAL"
+                    // IN MINIMO por defecto "1"
                     tablaHTML += `<tr>
                         <td style="mso-number-format:'\@'">${codigo}</td>
+                        <td style="mso-number-format:'\@'">${codigo}</td>
                         <td>${desc}</td>
-                        <td>${cant}</td>
-                        <td>${imp.toString().replace('.', ',')}</td>
                         <td>${costoText.replace('.', ',')}</td>
-                        <td>${margen}</td>
                         <td>${precioText.replace('.', ',')}</td>
+                        <td></td>
+                        <td>GENERAL</td>
+                        <td>${cant}</td>
+                        <td>1</td>
                     </tr>`;
                 }
             });
@@ -204,9 +205,8 @@
             const link = document.createElement("a");
             link.href = url;
             
-            // Generar nombre con fecha
             const fechaHora = new Date().toISOString().replace(/T/, '_').replace(/\..+/, '').replace(/:/g, '-');
-            link.download = `Carga_Factura_${fechaHora}.xls`;
+            link.download = `Importacion_POS_${fechaHora}.xls`;
             
             document.body.appendChild(link);
             link.click();
