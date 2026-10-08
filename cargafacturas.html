@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototipo POS - Carga Facturas (Excel 97-2003)</title>
+    <title>Prototipo POS - Carga Facturas (Comparativa)</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Librería SheetJS para exportar Excel real -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         input[type="number"]::-webkit-inner-spin-button, 
@@ -137,9 +136,17 @@
             if(lineas.length === 0) return;
             
             let headers = parseCSVLine(lineas[0]);
-            let colDeptoIndex = headers.findIndex(h => h.toUpperCase().includes('DEPARTAMENTO') || h.toUpperCase().includes('PROVEEDOR') || h.toUpperCase() === 'DEPTO');
-            if (colDeptoIndex === -1) colDeptoIndex = 6; 
             
+            // Índices dinámicos
+            let colDeptoIndex = headers.findIndex(h => h.toUpperCase().includes('DEPARTAMENTO') || h.toUpperCase().includes('PROVEEDOR') || h.toUpperCase() === 'DEPTO');
+            if (colDeptoIndex === -1) colDeptoIndex = 5; 
+            
+            let colCostoIndex = headers.findIndex(h => h.toUpperCase().includes('COSTO'));
+            if (colCostoIndex === -1) colCostoIndex = 2;
+            
+            let colPrecioIndex = headers.findIndex(h => h.toUpperCase().includes('VENTA') && !h.toUpperCase().includes('MAYOREO'));
+            if (colPrecioIndex === -1) colPrecioIndex = 3;
+
             for (let i = 1; i < lineas.length; i++) {
                 if (!lineas[i].trim()) continue;
                 
@@ -150,7 +157,10 @@
 
                 baseDeDatos.push({
                     codigo: cols[0] ? cols[0].trim() : '',
-                    descripcion: cols[1] ? cols[1].trim() : ''
+                    descripcion: cols[1] ? cols[1].trim() : '',
+                    costo: cols[colCostoIndex] ? cols[colCostoIndex].trim() : '0',
+                    precio: cols[colPrecioIndex] ? cols[colPrecioIndex].trim() : '0',
+                    departamento: depto
                 });
             }
             
@@ -200,16 +210,15 @@
 
                 if(codigo || desc || parseFloat(imp) > 0) {
                     hayDatos = true;
-                    // Se agregan los datos como sus tipos originales (números como números)
                     data.push([
-                        codigo,             // CODIGO (Texto, para no perder ceros a la izquierda)
-                        desc,               // NOMBRE
-                        costoFloat,         // P COSTO (Número)
-                        precioFloat,        // P VENTA (Número)
-                        0,                  // P MAYOREO (Cero por defecto)
-                        deptoSeleccionado,  // DEPARTAMENTO
-                        cant,               // INVENTARIO (Número)
-                        1                   // IN MINIMO (Número)
+                        codigo,             
+                        desc,               
+                        costoFloat,         
+                        precioFloat,        
+                        0,                  
+                        deptoSeleccionado,  
+                        cant,               
+                        1                   
                     ]);
                 }
             });
@@ -219,12 +228,10 @@
                 return;
             }
 
-            // Uso de SheetJS para crear el archivo Excel
             const ws = XLSX.utils.aoa_to_sheet(data);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Inventario");
             
-            // Obtener fecha y hora de Argentina (Buenos Aires)
             const dateBA = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Argentina/Buenos_Aires"}));
             const anio = dateBA.getFullYear();
             const mes = String(dateBA.getMonth() + 1).padStart(2, '0');
@@ -236,7 +243,6 @@
             const fechaHoraBA = `${anio}-${mes}-${dia}_${hora}-${minuto}-${segundo}`;
             const fileName = `Importacion_${deptoSeleccionado}_${fechaHoraBA}.xls`;
             
-            // Forzar formato biff2 (Excel 2.0) que guarda como .xls binario sin advertencias en Excel 97-2003
             XLSX.writeFile(wb, fileName, { bookType: "biff2" });
         }
 
@@ -281,7 +287,6 @@
             document.getElementById(`costo_${id}`).innerText = `$${costoReal.toFixed(2)}`;
             
             const precioVenta = costoReal * (1 + (margen / 100));
-            // Redondeo de centenas
             const precioRedondeado = Math.ceil(precioVenta / 100) * 100;
             
             document.getElementById(`precio_${id}`).innerText = `$${precioRedondeado.toFixed(2)}`;
@@ -292,10 +297,9 @@
             filas.forEach(fila => recalcularFila(fila.getAttribute('data-id')));
         }
 
-        // --- NUEVA LÓGICA: ENTER MUEVE HACIA ABAJO ---
         function manejarTeclas(e, id, colName) {
             if (e.key === 'Enter') {
-                e.preventDefault(); // Evita cualquier envío de formulario o salto raro
+                e.preventDefault(); 
                 
                 if (colName === 'codigo') {
                     buscarEnDb(id);
@@ -304,13 +308,11 @@
                 let nextId = id + 1;
                 let nextInput = document.getElementById(`${colName}_${nextId}`);
                 
-                // Si la celda de abajo no existe, agregamos una nueva fila
                 if (!nextInput) {
                     agregarFila();
                     nextInput = document.getElementById(`${colName}_${nextId}`);
                 }
                 
-                // Foco en la celda de abajo
                 if (nextInput) {
                     nextInput.focus();
                     if(nextInput.select) nextInput.select();
@@ -321,10 +323,15 @@
         function buscarEnDb(id) {
             const inputCodigo = document.getElementById(`codigo_${id}`);
             const codigo = inputCodigo.value.trim();
-            const divRef = document.getElementById(`ref_desc_${id}`);
+            
+            const divRefDesc = document.getElementById(`ref_desc_${id}`);
+            const divRefCosto = document.getElementById(`ref_costo_${id}`);
+            const divRefPrecio = document.getElementById(`ref_precio_${id}`);
             
             if (!codigo) {
-                divRef.innerText = "";
+                divRefDesc.innerText = "";
+                divRefCosto.innerText = "";
+                divRefPrecio.innerText = "";
                 return;
             }
 
@@ -333,15 +340,24 @@
             if (productoEncontrado) {
                 document.getElementById(`desc_${id}`).value = productoEncontrado.descripcion;
                 
-                // Muestra el nombre real de la base de datos debajo en gris pequeño
-                divRef.innerText = `DB: ${productoEncontrado.descripcion}`;
-                divRef.className = "text-xs text-gray-400 mt-1 h-4 italic truncate block";
+                // Muestra referencias alineadas a cada columna correspondiente
+                divRefDesc.innerText = `Prov: ${productoEncontrado.departamento || '-'} | DB: ${productoEncontrado.descripcion}`;
+                divRefDesc.className = "text-xs text-gray-500 mt-1 h-4 italic truncate block font-medium";
+                
+                // Mostrar con formato numérico
+                divRefCosto.innerText = `Ant: $${parseFloat(productoEncontrado.costo).toFixed(2)}`;
+                divRefCosto.className = "text-xs text-gray-500 mt-1 h-4 italic truncate block";
+                
+                divRefPrecio.innerText = `Ant: $${parseFloat(productoEncontrado.precio).toFixed(2)}`;
+                divRefPrecio.className = "text-xs text-gray-500 mt-1 h-4 italic truncate block";
                 
                 inputCodigo.parentElement.classList.add('flash-green');
                 setTimeout(() => inputCodigo.parentElement.classList.remove('flash-green'), 1000);
             } else {
-                divRef.innerText = "No encontrado en DB";
-                divRef.className = "text-xs text-red-400 mt-1 h-4 italic truncate block";
+                divRefDesc.innerText = "No encontrado en DB";
+                divRefDesc.className = "text-xs text-red-400 mt-1 h-4 italic truncate block";
+                divRefCosto.innerText = "";
+                divRefPrecio.innerText = "";
             }
         }
 
@@ -350,45 +366,50 @@
             const id = filaCount;
             
             const tr = document.createElement('tr');
-            tr.className = 'fila-producto hover:bg-gray-50 transition';
+            tr.className = 'fila-producto hover:bg-gray-50 transition border-b border-gray-200';
             tr.setAttribute('data-id', id);
             
-            // Alineación top para que los textos de referencia queden parejos
             tr.innerHTML = `
-                <td class="px-2 py-2 align-top">
+                <td class="px-2 py-3 align-top">
                     <input type="text" id="codigo_${id}" value="${codigo}" placeholder="Escanear..." 
                         onkeydown="manejarTeclas(event, ${id}, 'codigo')" onblur="buscarEnDb(${id})"
                         class="w-32 p-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono text-sm bg-gray-50">
-                    <div class="h-4"></div>
+                    <div class="h-4 mt-1"></div>
                 </td>
-                <td class="px-2 py-2 align-top">
+                <td class="px-2 py-3 align-top">
                     <input type="text" id="desc_${id}" value="${descripcion}" placeholder="Nombre del producto" 
                         onkeydown="manejarTeclas(event, ${id}, 'desc')"
-                        class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500">
+                        class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500 font-semibold text-gray-700">
                     <div id="ref_desc_${id}" class="text-xs text-gray-400 mt-1 h-4 italic truncate block"></div>
                 </td>
-                <td class="px-2 py-2 align-top">
+                <td class="px-2 py-3 align-top">
                     <input type="number" id="cant_${id}" value="${cantidad}" 
                         oninput="recalcularFila(${id})" onkeydown="manejarTeclas(event, ${id}, 'cant')"
-                        class="w-20 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500">
+                        class="w-20 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500 text-gray-700">
                 </td>
-                <td class="px-2 py-2 align-top">
+                <td class="px-2 py-3 align-top">
                     <input type="number" id="imp_${id}" value="${importe}" 
                         oninput="recalcularSumaNeto()" onkeydown="manejarTeclas(event, ${id}, 'imp')"
                         class="input-importe w-28 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500 font-semibold text-blue-900 bg-blue-50">
                 </td>
-                <td class="px-2 py-2 align-top font-bold text-blue-700 bg-blue-50 text-right rounded-md border-r-2 border-white" id="costo_${id}">$0.00</td>
-                <td class="px-2 py-2 align-top">
+                <td class="px-2 py-3 align-top bg-blue-50 text-right rounded-md border-r-2 border-white">
+                    <div id="costo_${id}" class="font-bold text-blue-700 text-lg">$0.00</div>
+                    <div id="ref_costo_${id}" class="text-xs text-gray-400 mt-1 h-4 italic truncate"></div>
+                </td>
+                <td class="px-2 py-3 align-top">
                     <div class="flex items-center justify-end">
                         <input type="number" id="margen_${id}" value="${margen}" 
                             oninput="recalcularFila(${id})" onkeydown="manejarTeclas(event, ${id}, 'margen')"
-                            class="w-16 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500">
+                            class="w-16 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500 font-semibold text-gray-700">
                         <span class="ml-1 text-gray-500 font-bold">%</span>
                     </div>
                 </td>
-                <td class="px-2 py-2 align-top font-bold text-green-700 bg-green-100 text-xl text-right rounded-md" id="precio_${id}">$0.00</td>
-                <td class="px-2 py-2 align-top text-center">
-                    <button onclick="this.closest('tr').remove(); recalcularSumaNeto();" class="text-red-400 hover:text-red-700 font-bold text-xl px-2">&times;</button>
+                <td class="px-2 py-3 align-top bg-green-100 text-right rounded-md">
+                    <div id="precio_${id}" class="font-bold text-green-700 text-xl">$0.00</div>
+                    <div id="ref_precio_${id}" class="text-xs text-gray-500 mt-1 h-4 italic truncate"></div>
+                </td>
+                <td class="px-2 py-3 align-top text-center">
+                    <button onclick="this.closest('tr').remove(); recalcularSumaNeto();" class="text-red-400 hover:text-red-700 font-bold text-2xl px-2">&times;</button>
                 </td>
             `;
             
