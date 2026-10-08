@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototipo POS - Carga Facturas (Actualizado)</title>
+    <title>Prototipo POS - Carga Facturas (Excel 97-2003)</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Librería SheetJS para exportar Excel real -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         input[type="number"]::-webkit-inner-spin-button, 
         input[type="number"]::-webkit-outer-spin-button { 
@@ -29,11 +31,9 @@
                     ⏳ Conectando DB...
                 </div>
                 <button onclick="limpiarFactura()" class="bg-red-100 text-red-700 hover:bg-red-200 px-4 py-2 rounded shadow transition font-bold text-sm flex items-center">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     Limpiar / Nueva
                 </button>
                 <button onclick="exportarXLS()" class="bg-green-600 text-white hover:bg-green-700 px-4 py-2 rounded shadow transition font-bold text-sm flex items-center">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                     Exportar a POS (.XLS)
                 </button>
             </div>
@@ -90,7 +90,7 @@
             </div>
             <div class="mt-4 flex justify-between items-center">
                 <button onclick="agregarFila()" class="bg-gray-800 text-white px-4 py-2 rounded shadow hover:bg-gray-700 transition font-bold">+ Agregar Fila Manual</button>
-                <p class="text-sm text-gray-500 italic">* El precio final se redondea automáticamente a la centena superior (ej: $1500, $1600).</p>
+                <p class="text-sm text-gray-500 italic">* Presiona ENTER para saltar a la celda de abajo en la misma columna.</p>
             </div>
         </div>
     </div>
@@ -180,19 +180,9 @@
         }
 
         function exportarXLS() {
-            let tablaHTML = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-            <head><meta charset="UTF-8"></head><body>
-            <table border="1">
-                <tr>
-                    <th style="background-color:#333; color:white;">CODIGO</th>
-                    <th style="background-color:#333; color:white;">NOMBRE</th>
-                    <th style="background-color:#333; color:white;">P COSTO</th>
-                    <th style="background-color:#333; color:white;">P VENTA</th>
-                    <th style="background-color:#333; color:white;">P MAYOREO</th>
-                    <th style="background-color:#333; color:white;">DEPARTAMENTO</th>
-                    <th style="background-color:#333; color:white;">INVENTARIO</th>
-                    <th style="background-color:#333; color:white;">IN MINIMO</th>
-                </tr>`;
+            let data = [
+                ["CODIGO", "NOMBRE", "P COSTO", "P VENTA", "P MAYOREO", "DEPARTAMENTO", "INVENTARIO", "IN MINIMO"]
+            ];
 
             const filas = document.querySelectorAll('.fila-producto');
             let hayDatos = false;
@@ -203,24 +193,24 @@
                 const id = fila.getAttribute('data-id');
                 const codigo = document.getElementById(`codigo_${id}`).value.trim();
                 const desc = document.getElementById(`desc_${id}`).value.trim();
-                const cant = document.getElementById(`cant_${id}`).value || 0;
+                const cant = parseFloat(document.getElementById(`cant_${id}`).value) || 0;
                 const imp = document.getElementById(`imp_${id}`).value || 0;
-                const costoText = document.getElementById(`costo_${id}`).innerText.replace('$', '').trim();
-                const precioText = document.getElementById(`precio_${id}`).innerText.replace('$', '').trim();
+                const costoFloat = parseFloat(document.getElementById(`costo_${id}`).innerText.replace('$', '').trim()) || 0;
+                const precioFloat = parseFloat(document.getElementById(`precio_${id}`).innerText.replace('$', '').trim()) || 0;
 
                 if(codigo || desc || parseFloat(imp) > 0) {
                     hayDatos = true;
-                    // Se agregó el valor "0" por defecto para P MAYOREO
-                    tablaHTML += `<tr>
-                        <td style="mso-number-format:'\@'">${codigo}</td>
-                        <td>${desc}</td>
-                        <td>${costoText.replace('.', ',')}</td>
-                        <td>${precioText.replace('.', ',')}</td>
-                        <td>0</td>
-                        <td>${deptoSeleccionado}</td>
-                        <td>${cant}</td>
-                        <td>1</td>
-                    </tr>`;
+                    // Se agregan los datos como sus tipos originales (números como números)
+                    data.push([
+                        codigo,             // CODIGO (Texto, para no perder ceros a la izquierda)
+                        desc,               // NOMBRE
+                        costoFloat,         // P COSTO (Número)
+                        precioFloat,        // P VENTA (Número)
+                        0,                  // P MAYOREO (Cero por defecto)
+                        deptoSeleccionado,  // DEPARTAMENTO
+                        cant,               // INVENTARIO (Número)
+                        1                   // IN MINIMO (Número)
+                    ]);
                 }
             });
 
@@ -229,12 +219,10 @@
                 return;
             }
 
-            tablaHTML += `</table></body></html>`;
-            
-            const blob = new Blob([tablaHTML], { type: 'application/vnd.ms-excel' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
+            // Uso de SheetJS para crear el archivo Excel
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Inventario");
             
             // Obtener fecha y hora de Argentina (Buenos Aires)
             const dateBA = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Argentina/Buenos_Aires"}));
@@ -246,11 +234,10 @@
             const segundo = String(dateBA.getSeconds()).padStart(2, '0');
             
             const fechaHoraBA = `${anio}-${mes}-${dia}_${hora}-${minuto}-${segundo}`;
-            link.download = `Importacion_${deptoSeleccionado}_${fechaHoraBA}.xls`;
+            const fileName = `Importacion_${deptoSeleccionado}_${fechaHoraBA}.xls`;
             
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            // Forzar formato biff2 (Excel 2.0) que guarda como .xls binario sin advertencias en Excel 97-2003
+            XLSX.writeFile(wb, fileName, { bookType: "biff2" });
         }
 
         let filaCount = 0;
@@ -294,7 +281,7 @@
             document.getElementById(`costo_${id}`).innerText = `$${costoReal.toFixed(2)}`;
             
             const precioVenta = costoReal * (1 + (margen / 100));
-            // Redondeo de centenas (ej: a los 100 pesos)
+            // Redondeo de centenas
             const precioRedondeado = Math.ceil(precioVenta / 100) * 100;
             
             document.getElementById(`precio_${id}`).innerText = `$${precioRedondeado.toFixed(2)}`;
@@ -305,27 +292,56 @@
             filas.forEach(fila => recalcularFila(fila.getAttribute('data-id')));
         }
 
-        function manejarEscaner(e, id) {
+        // --- NUEVA LÓGICA: ENTER MUEVE HACIA ABAJO ---
+        function manejarTeclas(e, id, colName) {
             if (e.key === 'Enter') {
-                e.preventDefault();
-                buscarEnDb(id);
+                e.preventDefault(); // Evita cualquier envío de formulario o salto raro
+                
+                if (colName === 'codigo') {
+                    buscarEnDb(id);
+                }
+                
+                let nextId = id + 1;
+                let nextInput = document.getElementById(`${colName}_${nextId}`);
+                
+                // Si la celda de abajo no existe, agregamos una nueva fila
+                if (!nextInput) {
+                    agregarFila();
+                    nextInput = document.getElementById(`${colName}_${nextId}`);
+                }
+                
+                // Foco en la celda de abajo
+                if (nextInput) {
+                    nextInput.focus();
+                    if(nextInput.select) nextInput.select();
+                }
             }
         }
 
         function buscarEnDb(id) {
             const inputCodigo = document.getElementById(`codigo_${id}`);
             const codigo = inputCodigo.value.trim();
-            if (!codigo) return;
+            const divRef = document.getElementById(`ref_desc_${id}`);
+            
+            if (!codigo) {
+                divRef.innerText = "";
+                return;
+            }
 
             const productoEncontrado = baseDeDatos.find(p => p.codigo === codigo || p.codigo === codigo.replace(/^0+/, ''));
 
             if (productoEncontrado) {
                 document.getElementById(`desc_${id}`).value = productoEncontrado.descripcion;
                 
+                // Muestra el nombre real de la base de datos debajo en gris pequeño
+                divRef.innerText = `DB: ${productoEncontrado.descripcion}`;
+                divRef.className = "text-xs text-gray-400 mt-1 h-4 italic truncate block";
+                
                 inputCodigo.parentElement.classList.add('flash-green');
                 setTimeout(() => inputCodigo.parentElement.classList.remove('flash-green'), 1000);
-                
-                document.getElementById(`cant_${id}`).focus();
+            } else {
+                divRef.innerText = "No encontrado en DB";
+                divRef.className = "text-xs text-red-400 mt-1 h-4 italic truncate block";
             }
         }
 
@@ -337,40 +353,47 @@
             tr.className = 'fila-producto hover:bg-gray-50 transition';
             tr.setAttribute('data-id', id);
             
+            // Alineación top para que los textos de referencia queden parejos
             tr.innerHTML = `
-                <td class="px-2 py-2">
+                <td class="px-2 py-2 align-top">
                     <input type="text" id="codigo_${id}" value="${codigo}" placeholder="Escanear..." 
-                        onkeydown="manejarEscaner(event, ${id})" onblur="buscarEnDb(${id})"
+                        onkeydown="manejarTeclas(event, ${id}, 'codigo')" onblur="buscarEnDb(${id})"
                         class="w-32 p-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono text-sm bg-gray-50">
+                    <div class="h-4"></div>
                 </td>
-                <td class="px-2 py-2">
-                    <input type="text" id="desc_${id}" value="${descripcion}" placeholder="Nombre del producto" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500">
+                <td class="px-2 py-2 align-top">
+                    <input type="text" id="desc_${id}" value="${descripcion}" placeholder="Nombre del producto" 
+                        onkeydown="manejarTeclas(event, ${id}, 'desc')"
+                        class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500">
+                    <div id="ref_desc_${id}" class="text-xs text-gray-400 mt-1 h-4 italic truncate block"></div>
                 </td>
-                <td class="px-2 py-2">
-                    <input type="number" id="cant_${id}" value="${cantidad}" oninput="recalcularFila(${id})" class="w-20 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500">
+                <td class="px-2 py-2 align-top">
+                    <input type="number" id="cant_${id}" value="${cantidad}" 
+                        oninput="recalcularFila(${id})" onkeydown="manejarTeclas(event, ${id}, 'cant')"
+                        class="w-20 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500">
                 </td>
-                <td class="px-2 py-2">
-                    <input type="number" id="imp_${id}" value="${importe}" oninput="recalcularSumaNeto()" class="input-importe w-28 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500 font-semibold text-blue-900 bg-blue-50">
+                <td class="px-2 py-2 align-top">
+                    <input type="number" id="imp_${id}" value="${importe}" 
+                        oninput="recalcularSumaNeto()" onkeydown="manejarTeclas(event, ${id}, 'imp')"
+                        class="input-importe w-28 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500 font-semibold text-blue-900 bg-blue-50">
                 </td>
-                <td class="px-2 py-2 font-bold text-blue-700 bg-blue-50 text-right rounded-md border-r-2 border-white" id="costo_${id}">$0.00</td>
-                <td class="px-2 py-2">
+                <td class="px-2 py-2 align-top font-bold text-blue-700 bg-blue-50 text-right rounded-md border-r-2 border-white" id="costo_${id}">$0.00</td>
+                <td class="px-2 py-2 align-top">
                     <div class="flex items-center justify-end">
-                        <input type="number" id="margen_${id}" value="${margen}" oninput="recalcularFila(${id})" class="w-16 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500">
+                        <input type="number" id="margen_${id}" value="${margen}" 
+                            oninput="recalcularFila(${id})" onkeydown="manejarTeclas(event, ${id}, 'margen')"
+                            class="w-16 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500">
                         <span class="ml-1 text-gray-500 font-bold">%</span>
                     </div>
                 </td>
-                <td class="px-2 py-2 font-bold text-green-700 bg-green-100 text-xl text-right rounded-md" id="precio_${id}">$0.00</td>
-                <td class="px-2 py-2 text-center">
+                <td class="px-2 py-2 align-top font-bold text-green-700 bg-green-100 text-xl text-right rounded-md" id="precio_${id}">$0.00</td>
+                <td class="px-2 py-2 align-top text-center">
                     <button onclick="this.closest('tr').remove(); recalcularSumaNeto();" class="text-red-400 hover:text-red-700 font-bold text-xl px-2">&times;</button>
                 </td>
             `;
             
             document.getElementById('tablaProductos').appendChild(tr);
             recalcularFila(id);
-            
-            if (!codigo) {
-                setTimeout(() => document.getElementById(`codigo_${id}`).focus(), 10);
-            }
         }
 
         document.getElementById('facturaTotal').addEventListener('input', actualizarCoeficiente);
