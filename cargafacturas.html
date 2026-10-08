@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prototipo POS - Carga Facturas (Comparativa)</title>
+    <title>Prototipo POS - Carga Facturas (Corrección NaN)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
@@ -128,6 +128,21 @@
             return cols;
         }
 
+        // Función robusta para limpiar cualquier símbolo raro o formato de moneda argentino
+        function parseCurrency(str) {
+            if (!str) return 0;
+            let val = String(str).replace(/[\$\s]/g, ''); // Quita símbolos $ y espacios
+            // Si tiene el formato argentino 1.200,50
+            if (val.includes('.') && val.includes(',')) {
+                val = val.replace(/\./g, ''); // Elimina los puntos de miles
+                val = val.replace(',', '.'); // Cambia la coma decimal a punto para JS
+            } else if (val.includes(',')) {
+                val = val.replace(',', '.'); // Cambia coma a punto si solo hay coma (ej: 150,50)
+            }
+            let parsed = parseFloat(val);
+            return isNaN(parsed) ? 0 : parsed;
+        }
+
         function parsearCSV(str) {
             const lineas = str.split('\n');
             baseDeDatos = [];
@@ -137,7 +152,6 @@
             
             let headers = parseCSVLine(lineas[0]);
             
-            // Índices dinámicos
             let colDeptoIndex = headers.findIndex(h => h.toUpperCase().includes('DEPARTAMENTO') || h.toUpperCase().includes('PROVEEDOR') || h.toUpperCase() === 'DEPTO');
             if (colDeptoIndex === -1) colDeptoIndex = 5; 
             
@@ -158,8 +172,8 @@
                 baseDeDatos.push({
                     codigo: cols[0] ? cols[0].trim() : '',
                     descripcion: cols[1] ? cols[1].trim() : '',
-                    costo: cols[colCostoIndex] ? cols[colCostoIndex].trim() : '0',
-                    precio: cols[colPrecioIndex] ? cols[colPrecioIndex].trim() : '0',
+                    costo: parseCurrency(cols[colCostoIndex]), // Limpieza extrema de números
+                    precio: parseCurrency(cols[colPrecioIndex]), // Limpieza extrema de números
                     departamento: depto
                 });
             }
@@ -340,15 +354,14 @@
             if (productoEncontrado) {
                 document.getElementById(`desc_${id}`).value = productoEncontrado.descripcion;
                 
-                // Muestra referencias alineadas a cada columna correspondiente
                 divRefDesc.innerText = `Prov: ${productoEncontrado.departamento || '-'} | DB: ${productoEncontrado.descripcion}`;
                 divRefDesc.className = "text-xs text-gray-500 mt-1 h-4 italic truncate block font-medium";
                 
-                // Mostrar con formato numérico
-                divRefCosto.innerText = `Ant: $${parseFloat(productoEncontrado.costo).toFixed(2)}`;
+                // Formateamos usando la versión validada y convertida a float
+                divRefCosto.innerText = `Ant: $${productoEncontrado.costo.toFixed(2)}`;
                 divRefCosto.className = "text-xs text-gray-500 mt-1 h-4 italic truncate block";
                 
-                divRefPrecio.innerText = `Ant: $${parseFloat(productoEncontrado.precio).toFixed(2)}`;
+                divRefPrecio.innerText = `Ant: $${productoEncontrado.precio.toFixed(2)}`;
                 divRefPrecio.className = "text-xs text-gray-500 mt-1 h-4 italic truncate block";
                 
                 inputCodigo.parentElement.classList.add('flash-green');
