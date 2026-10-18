@@ -313,4 +313,90 @@
         }
 
         function onScanFailure(error) {
-            // Errores silenc
+            // Errores silenciosos mientras busca enfocar el código
+        }
+
+        function handleSearch() {
+            const rawQuery = document.getElementById('searchInput').value;
+            const selectedDept = document.getElementById('deptSelect') ? document.getElementById('deptSelect').value : '';
+            const resultsContainer = document.getElementById('results');
+            const resultsInfo = document.getElementById('results-info');
+            
+            resultsContainer.innerHTML = '';
+            resultsInfo.innerHTML = '';
+
+            if (rawQuery.trim().length === 0 && selectedDept === '') {
+                return;
+            }
+
+            const query = normalizeText(rawQuery);
+            const stopWords = ['de', 'la', 'el', 'los', 'las', 'un', 'una', 'unos', 'unas', 'con', 'para', 'del', 'al', 'y', 'o', 'en'];
+            const tokens = query.split(/\s+/).filter(t => t.length > 0 && !stopWords.includes(t));
+
+            let filtered = combinedData.filter(row => {
+                if (selectedDept && deptKey) {
+                    if (row[deptKey] !== selectedDept) return false;
+                }
+
+                if (tokens.length > 0) {
+                    const rowText = normalizeText(
+                        Object.entries(row)
+                            .filter(([key]) => key !== '_origen' && key !== '_clase')
+                            .map(([, val]) => val)
+                            .join(' ')
+                    );
+                    
+                    return tokens.every(token => rowText.includes(token));
+                }
+                
+                return true;
+            });
+
+            const totalFound = filtered.length;
+            const MAX_RESULTS = 100;
+            
+            if (totalFound === 0) {
+                resultsInfo.innerHTML = 'No se encontraron coincidencias.';
+                return;
+            }
+
+            let infoText = `Se encontraron ${totalFound} resultados.`;
+            if (totalFound > MAX_RESULTS) {
+                infoText += ` Mostrando los primeros ${MAX_RESULTS}.`;
+                filtered = filtered.slice(0, MAX_RESULTS);
+            }
+            resultsInfo.innerHTML = infoText;
+
+            const fragment = document.createDocumentFragment();
+            filtered.forEach(row => {
+                const card = document.createElement('div');
+                card.className = 'result-card';
+
+                const tag = document.createElement('span');
+                tag.className = 'tag ' + row._clase;
+                tag.innerText = row._origen;
+                card.appendChild(tag);
+
+                const rowData = document.createElement('div');
+                rowData.className = 'row-data';
+
+                for (const key in row) {
+                    if (key !== '_origen' && key !== '_clase' && row[key] && String(row[key]).trim() !== '') {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+                        cell.innerHTML = '<strong>' + key + '</strong> ' + row[key];
+                        rowData.appendChild(cell);
+                    }
+                }
+                
+                card.appendChild(rowData);
+                fragment.appendChild(card);
+            });
+            
+            resultsContainer.appendChild(fragment);
+        }
+
+        window.onload = loadData;
+    </script>
+</body>
+</html>
