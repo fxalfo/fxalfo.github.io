@@ -3,233 +3,539 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Procesador de Facturas a XLS</title>
-    <!-- Librerías necesarias mediante CDN -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <title>Prototipo POS - Carga Facturas (Drag & Drop)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <!-- SortableJS para Drag & Drop compatible con pantallas táctiles (móviles) -->
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
-    
     <style>
-        body { font-family: system-ui; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
-        .panel { border: 1px solid #ccc; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
-        table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9rem; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        
-        /* Estilos para arrastrar y soltar */
-        .drag-handle { cursor: grab; text-align: center; color: #888; font-size: 1.2rem; user-select: none; }
-        .drag-handle:active { cursor: grabbing; }
-        .sortable-ghost { opacity: 0.4; background-color: #f0f8ff; }
-        .sortable-drag { background-color: #fff; box-shadow: 0 5px 15px rgba(0,0,0,0.15); }
-
-        .btn { padding: 8px 16px; margin: 4px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; }
-        .btn-primary { background-color: #007bff; color: white; }
-        .btn-success { background-color: #28a745; color: white; }
-        .btn-danger { background-color: #dc3545; color: white; }
-        .actions { margin-top: 1rem; display: flex; gap: 10px; flex-wrap: wrap; }
+        input[type="number"]::-webkit-inner-spin-button, 
+        input[type="number"]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        .flash-green {
+            animation: flashGreen 1s ease-out;
+        }
+        @keyframes flashGreen {
+            0% { background-color: #bbf7d0; }
+            100% { background-color: transparent; }
+        }
+        /* Estilos visuales al arrastrar */
+        .dragging {
+            opacity: 0.6;
+            background-color: #eff6ff !important;
+        }
+        .drag-over-top {
+            border-top: 3px solid #3b82f6 !important;
+        }
+        .drag-over-bottom {
+            border-bottom: 3px solid #3b82f6 !important;
+        }
+        .cursor-grab { cursor: grab; }
+        .cursor-grab:active { cursor: grabbing; }
     </style>
 </head>
-<body>
+<body class="bg-gray-100 p-8 font-sans">
+    <div class="max-w-7xl mx-auto bg-white rounded-lg shadow-md p-6">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold text-gray-800">Carga de Mercadería (Exportación POS)</h1>
+            <div class="flex space-x-3">
+                <div id="dbStatus" class="text-sm font-medium px-3 py-2 bg-yellow-100 text-yellow-800 rounded flex items-center">
+                    ⏳ Conectando DB...
+                </div>
+                <button onclick="limpiarFactura()" class="bg-red-100 text-red-700 hover:bg-red-200 px-4 py-2 rounded shadow transition font-bold text-sm flex items-center">
+                    Limpiar / Nueva
+                </button>
+                <button onclick="exportarXLS()" class="bg-green-600 text-white hover:bg-green-700 px-4 py-2 rounded shadow transition font-bold text-sm flex items-center">
+                    Exportar a POS (.XLS)
+                </button>
+            </div>
+        </div>
+        
+        <!-- Cabecera Factura -->
+        <div class="bg-blue-50 p-4 rounded-md mb-6 border border-blue-200">
+            <h2 class="text-lg font-semibold text-blue-800 mb-3">1. Datos de la Factura</h2>
+            <div class="flex flex-wrap gap-6 items-end">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Total a Pagar</label>
+                    <input type="number" id="facturaTotal" placeholder="Ej: 306628.85" class="mt-1 block w-40 rounded-md border-gray-300 shadow-sm p-3 border-2 focus:border-blue-500 focus:outline-none text-lg font-bold">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-500">Neto Gravado</label>
+                    <input type="number" id="facturaNeto" value="0" readonly class="mt-1 block w-40 rounded-md border-gray-200 bg-gray-100 shadow-sm p-3 border focus:outline-none text-lg font-bold text-gray-500 cursor-not-allowed">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Proveedor / Departamento</label>
+                    <select id="proveedorSelect" class="mt-1 block w-64 rounded-md border-gray-300 shadow-sm p-3 border-2 focus:border-blue-500 focus:outline-none text-lg font-bold bg-white text-gray-800">
+                        <option value="GENERAL">GENERAL</option>
+                    </select>
+                </div>
 
-    <div class="panel">
-        <h2>Cargar Factura de Compra</h2>
-        <input type="file" id="invoiceImage" accept="image/*" capture="environment" style="margin-bottom: 10px;">
-        <br>
-        <button class="btn btn-primary" onclick="procesarFactura()">Procesar Factura (OCR)</button>
-        <button class="btn btn-danger" onclick="limpiarFormulario()">Limpiar para Nueva Factura</button>
-        <p id="status" style="font-weight: bold; color: #555;">Esperando acción...</p>
-    </div>
+                <div class="pb-2">
+                    <span class="text-sm text-gray-600 block mb-1">Coeficiente Impositivo:</span>
+                    <span id="coeficienteTag" class="font-bold text-blue-700 bg-blue-100 px-4 py-2 rounded text-lg">1.0000</span>
+                </div>
+            </div>
+        </div>
 
-    <h3>Datos a Exportar (Arrastra las filas para reordenar)</h3>
-    <div style="overflow-x: auto;">
-        <table id="previewTable">
-            <thead>
-                <tr>
-                    <th style="width: 40px;"></th> <!-- Columna para el ícono de arrastrar -->
-                    <th>CODIGO</th><th>CODEBAR</th><th>NOMBRE</th><th>P COSTO</th><th>P VENTA</th><th>P MAYOREO</th><th>DEPTO</th><th>INV</th><th>MIN</th>
-                </tr>
-            </thead>
-            <tbody id="previewBody"></tbody>
-        </table>
-    </div>
-    
-    <div class="actions">
-        <button class="btn btn-success" onclick="exportarExcel()">Descargar IMPORTAR PRODUCTOS.xls</button>
-        <button class="btn btn-success" onclick="exportarCSV()">Descargar CSV</button>
+        <!-- Grilla Productos -->
+        <div>
+            <h2 class="text-lg font-semibold text-gray-800 mb-3">2. Escaneo y Detalle de Productos</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 border">
+                    <thead class="bg-gray-800">
+                        <tr>
+                            <th class="px-1 py-3 w-8 text-center text-gray-100">↕</th> <!-- Columna Drag Handle -->
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-100 uppercase">Cód. Barras</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-100 uppercase w-1/4">Producto</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-100 uppercase">Cantidad</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-100 uppercase">Importe Línea ($)</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-blue-300 uppercase">Costo Real</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-gray-100 uppercase">Margen (%)</th>
+                            <th class="px-3 py-3 text-left text-xs font-medium text-green-400 uppercase">Precio Final ($)</th>
+                            <th class="px-2 py-3"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaProductos" class="bg-white divide-y divide-gray-200">
+                        <!-- Las filas se inyectan acá -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-4 flex justify-between items-center">
+                <button onclick="agregarFila()" class="bg-gray-800 text-white px-4 py-2 rounded shadow hover:bg-gray-700 transition font-bold">+ Agregar Fila Manual</button>
+                <p class="text-sm text-gray-500 italic">* Arrastra desde el icono <b>↕</b> a la izquierda para reordenar la lista.</p>
+            </div>
+        </div>
     </div>
 
     <script>
-        const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQXw6JguUct7dv50KyEPEQMqPD-WtOrBlfnWuMV_Yx91v5ty1YmNNXzZ9G-YPYlBw/pub?output=csv";
-        let baseDatosCSV = [];
-        let productosProcesados = [];
+        let baseDeDatos = [];
 
-        // Inicializar SortableJS en la tabla
-        const tbody = document.getElementById('previewBody');
-        Sortable.create(tbody, {
-            handle: '.drag-handle', // Solo se arrastra desde el ícono
-            animation: 150,
-            ghostClass: 'sortable-ghost',
-            onEnd: function (evt) {
-                // Sincronizar el array de datos con el nuevo orden visual de la tabla
-                const oldIndex = evt.oldIndex;
-                const newIndex = evt.newIndex;
-                
-                // Mover el elemento dentro del array
-                const elementoMovido = productosProcesados.splice(oldIndex, 1)[0];
-                productosProcesados.splice(newIndex, 0, elementoMovido);
-                
-                console.log("Nuevo orden establecido:", productosProcesados);
-            }
-        });
-
-        // 1. Cargar la base de datos de Google Sheets al iniciar
-        Papa.parse(CSV_URL, {
-            download: true,
-            header: true,
-            complete: function(results) {
-                baseDatosCSV = results.data;
-                document.getElementById('status').innerText = `Base de datos cargada (${baseDatosCSV.length} artículos). Esperando factura...`;
-            }
-        });
-
-        // 2. Función principal de OCR y procesamiento
-        async function procesarFactura() {
-            const imageInput = document.getElementById('invoiceImage');
-            const statusLabel = document.getElementById('status');
-
-            if (!imageInput.files[0]) return alert("Sube o toma una foto primero.");
-            
-            statusLabel.innerText = "Leyendo imagen con OCR (esto puede tomar unos segundos)...";
-            
+        async function inicializarBaseDatos() {
+            const url = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQXw6JguUct7dv50KyEPEQMqPD-WtOrBlfnWuMV_Yx91v5ty1YmNNXzZ9G-YPYlBw/pub?output=csv';
             try {
-                const worker = await Tesseract.createWorker({
-                    logger: m => console.log(m)
-                });
-                await worker.loadLanguage('spa');
-                await worker.initialize('spa');
+                const response = await fetch(url);
+                const text = await response.text();
+                parsearCSV(text);
                 
-                const ret = await worker.recognize(imageInput.files[0]);
-                const textoExtraido = ret.data.text;
-                
-                await worker.terminate();
-
-                statusLabel.innerText = "Imagen procesada. Analizando líneas...";
-                analizarLineasFactura(textoExtraido);
-
+                const statusDiv = document.getElementById('dbStatus');
+                statusDiv.className = 'text-sm font-bold px-3 py-2 bg-green-100 text-green-800 rounded flex items-center';
+                statusDiv.innerHTML = `✓ DB Conectada (${baseDeDatos.length})`;
             } catch (error) {
-                statusLabel.innerText = "Error en OCR: " + error;
+                const statusDiv = document.getElementById('dbStatus');
+                statusDiv.className = 'text-sm font-bold px-3 py-2 bg-red-100 text-red-800 rounded flex items-center';
+                statusDiv.innerHTML = '✗ Error Sheets';
+                console.error("Error cargando CSV:", error);
             }
         }
 
-        // 3. Análisis de texto y validación manual
-        function analizarLineasFactura(texto) {
-            const lineas = texto.split('\n').filter(l => l.trim().length > 5);
-            productosProcesados = [];
+        function parseCSVLine(line) {
+            let cols = [];
+            let curr = '';
+            let inQuote = false;
+            for(let char of line) {
+                if (char === '"') inQuote = !inQuote;
+                else if (char === ',' && !inQuote) { cols.push(curr); curr = ''; }
+                else curr += char;
+            }
+            cols.push(curr);
+            return cols;
+        }
 
-            lineas.forEach(linea => {
-                let nombreAprox = linea.replace(/[0-9$,]/g, '').trim(); 
-                let costoMatch = linea.match(/\d+[\.,]\d{2}/);
-                let costoUnitario = costoMatch ? parseFloat(costoMatch[0].replace(',', '.')) : 0;
+        function parseCurrency(str) {
+            if (!str) return 0;
+            let val = String(str).replace(/[\$\s]/g, '');
+            if (val.includes('.') && val.includes(',')) {
+                val = val.replace(/\./g, '');
+                val = val.replace(',', '.');
+            } else if (val.includes(',')) {
+                val = val.replace(',', '.');
+            }
+            let parsed = parseFloat(val);
+            return isNaN(parsed) ? 0 : parsed;
+        }
 
-                if(nombreAprox.length < 3) return;
+        function parsearCSV(str) {
+            const lineas = str.split('\n');
+            baseDeDatos = [];
+            let departamentosUnicos = new Set();
+            
+            if(lineas.length === 0) return;
+            
+            let headers = parseCSVLine(lineas[0]);
+            
+            let colDeptoIndex = headers.findIndex(h => h.toUpperCase().includes('DEPARTAMENTO') || h.toUpperCase().includes('PROVEEDOR') || h.toUpperCase() === 'DEPTO');
+            if (colDeptoIndex === -1) colDeptoIndex = 5; 
+            
+            let colCostoIndex = headers.findIndex(h => h.toUpperCase().includes('COSTO'));
+            if (colCostoIndex === -1) colCostoIndex = 2;
+            
+            let colPrecioIndex = headers.findIndex(h => h.toUpperCase().includes('VENTA') && !h.toUpperCase().includes('MAYOREO'));
+            if (colPrecioIndex === -1) colPrecioIndex = 3;
 
-                let coincidencia = baseDatosCSV.find(item => 
-                    item.NOMBRE && item.NOMBRE.toUpperCase().includes(nombreAprox.toUpperCase())
-                );
+            for (let i = 1; i < lineas.length; i++) {
+                if (!lineas[i].trim()) continue;
+                
+                let cols = parseCSVLine(lineas[i]);
+                
+                let depto = cols[colDeptoIndex] ? cols[colDeptoIndex].trim() : '';
+                if(depto) departamentosUnicos.add(depto);
 
-                let codigo = "";
-                let nombreFinal = nombreAprox;
+                baseDeDatos.push({
+                    codigo: cols[0] ? cols[0].trim() : '',
+                    descripcion: cols[1] ? cols[1].trim() : '',
+                    costo: parseCurrency(cols[colCostoIndex]),
+                    precio: parseCurrency(cols[colPrecioIndex]),
+                    departamento: depto
+                });
+            }
+            
+            const select = document.getElementById('proveedorSelect');
+            let deptosArray = Array.from(departamentosUnicos).sort();
+            deptosArray.forEach(depto => {
+                if(depto.toUpperCase() !== 'GENERAL' && depto.toUpperCase() !== 'DEPARTAMENTO') {
+                    let opt = document.createElement('option');
+                    opt.value = depto;
+                    opt.textContent = depto;
+                    select.appendChild(opt);
+                }
+            });
+        }
 
-                if (coincidencia) {
-                    codigo = coincidencia.CODIGO || coincidencia.CODEBAR;
-                    nombreFinal = coincidencia.NOMBRE;
+        function limpiarFactura() {
+            if(confirm("¿Estás seguro de que deseas limpiar la pantalla? Se perderán los datos que no hayas exportado.")) {
+                document.getElementById('facturaTotal').value = '';
+                document.getElementById('facturaNeto').value = '0';
+                document.getElementById('coeficienteTag').innerText = '1.0000';
+                document.getElementById('proveedorSelect').value = 'GENERAL';
+                
+                document.getElementById('tablaProductos').innerHTML = '';
+                filaCount = 0;
+                agregarFila(); 
+            }
+        }
+
+        function exportarXLS() {
+            let data = [
+                ["CODIGO", "NOMBRE", "P COSTO", "P VENTA", "P MAYOREO", "DEPARTAMENTO", "INVENTARIO", "IN MINIMO"]
+            ];
+
+            const filas = document.querySelectorAll('.fila-producto');
+            let hayDatos = false;
+            
+            const deptoSeleccionado = document.getElementById('proveedorSelect').value;
+
+            filas.forEach(fila => {
+                const id = fila.getAttribute('data-id');
+                const codigo = document.getElementById(`codigo_${id}`).value.trim();
+                const desc = document.getElementById(`desc_${id}`).value.trim();
+                const cant = parseFloat(document.getElementById(`cant_${id}`).value) || 0;
+                const imp = document.getElementById(`imp_${id}`).value || 0;
+                const costoFloat = parseFloat(document.getElementById(`costo_${id}`).innerText.replace('$', '').trim()) || 0;
+                const precioFloat = parseFloat(document.getElementById(`precio_${id}`).innerText.replace('$', '').trim()) || 0;
+
+                if(codigo || desc || parseFloat(imp) > 0) {
+                    hayDatos = true;
+                    data.push([
+                        codigo,             
+                        desc,               
+                        costoFloat,         
+                        precioFloat,        
+                        0,                  
+                        deptoSeleccionado,  
+                        cant,               
+                        1                   
+                    ]);
+                }
+            });
+
+            if(!hayDatos) {
+                alert("No hay productos cargados para exportar.");
+                return;
+            }
+
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Inventario");
+            
+            const dateBA = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Argentina/Buenos_Aires"}));
+            const anio = dateBA.getFullYear();
+            const mes = String(dateBA.getMonth() + 1).padStart(2, '0');
+            const dia = String(dateBA.getDate()).padStart(2, '0');
+            const hora = String(dateBA.getHours()).padStart(2, '0');
+            const minuto = String(dateBA.getMinutes()).padStart(2, '0');
+            const segundo = String(dateBA.getSeconds()).padStart(2, '0');
+            
+            const fechaHoraBA = `${anio}-${mes}-${dia}_${hora}-${minuto}-${segundo}`;
+            const fileName = `Importacion_${deptoSeleccionado}_${fechaHoraBA}.xls`;
+            
+            XLSX.writeFile(wb, fileName, { bookType: "biff2" });
+        }
+
+        // --- LÓGICA DE DRAG & DROP ---
+        let draggedRow = null;
+
+        function handleDragStart(e) {
+            draggedRow = this;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', this.innerHTML); 
+            setTimeout(() => this.classList.add('dragging'), 0);
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            
+            const bounding = this.getBoundingClientRect();
+            const offset = bounding.y + (bounding.height / 2);
+            
+            this.classList.remove('drag-over-top', 'drag-over-bottom');
+            if (e.clientY - offset > 0) {
+                this.classList.add('drag-over-bottom');
+            } else {
+                this.classList.add('drag-over-top');
+            }
+            return false;
+        }
+
+        function handleDragEnter(e) {
+            e.preventDefault();
+        }
+
+        function handleDragLeave(e) {
+            this.classList.remove('drag-over-top', 'drag-over-bottom');
+        }
+
+        function handleDrop(e) {
+            e.stopPropagation();
+            this.classList.remove('drag-over-top', 'drag-over-bottom');
+
+            if (draggedRow !== this && draggedRow !== null) {
+                const bounding = this.getBoundingClientRect();
+                const offset = bounding.y + (bounding.height / 2);
+                if (e.clientY - offset > 0) {
+                    this.parentNode.insertBefore(draggedRow, this.nextSibling);
                 } else {
-                    codigo = prompt(`⚠️ Sistema: No se encontró código para el artículo: "${nombreAprox}".\n\nPor favor, ingrese el código de barras o código interno manualmente:`);
-                    if (!codigo || codigo.trim() === "") {
-                        codigo = "SIN_CODIGO"; 
+                    this.parentNode.insertBefore(draggedRow, this);
+                }
+            }
+            return false;
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('dragging');
+            let rows = document.querySelectorAll('.fila-producto');
+            rows.forEach(row => {
+                row.classList.remove('drag-over-top', 'drag-over-bottom');
+            });
+            draggedRow = null;
+        }
+
+        function preventDragOnInput(e) {
+            // Permite seleccionar texto dentro de los inputs sin que se arrastre la fila por error
+            e.stopPropagation();
+        }
+
+        let filaCount = 0;
+
+        function recalcularSumaNeto() {
+            let sumaNeto = 0;
+            const inputsImporte = document.querySelectorAll('.input-importe');
+            inputsImporte.forEach(input => {
+                sumaNeto += parseFloat(input.value) || 0;
+            });
+            
+            document.getElementById('facturaNeto').value = sumaNeto.toFixed(2);
+            actualizarCoeficiente();
+        }
+
+        function actualizarCoeficiente() {
+            const neto = parseFloat(document.getElementById('facturaNeto').value) || 0;
+            const total = parseFloat(document.getElementById('facturaTotal').value) || 0;
+            
+            let coeficiente = 1;
+            if (neto > 0 && total > 0) {
+                coeficiente = total / neto;
+            }
+            
+            document.getElementById('coeficienteTag').innerText = coeficiente.toFixed(4);
+            recalcularTabla();
+        }
+
+        function recalcularFila(id) {
+            const coeficiente = parseFloat(document.getElementById('coeficienteTag').innerText);
+            
+            const cantidad = parseFloat(document.getElementById(`cant_${id}`).value) || 0;
+            const importe = parseFloat(document.getElementById(`imp_${id}`).value) || 0;
+            const margen = parseFloat(document.getElementById(`margen_${id}`).value) || 0;
+            
+            let costoReal = 0;
+            if (cantidad > 0) {
+                costoReal = (importe * coeficiente) / cantidad;
+            }
+            
+            document.getElementById(`costo_${id}`).innerText = `$${costoReal.toFixed(2)}`;
+            
+            const precioVenta = costoReal * (1 + (margen / 100));
+            const precioRedondeado = Math.ceil(precioVenta / 100) * 100;
+            
+            document.getElementById(`precio_${id}`).innerText = `$${precioRedondeado.toFixed(2)}`;
+        }
+
+        function recalcularTabla() {
+            const filas = document.querySelectorAll('.fila-producto');
+            filas.forEach(fila => recalcularFila(fila.getAttribute('data-id')));
+        }
+
+        function manejarTeclas(e, id, colName) {
+            if (e.key === 'Enter') {
+                e.preventDefault(); 
+                
+                if (colName === 'codigo') {
+                    buscarEnDb(id);
+                }
+                
+                // Encontrar la fila actual en el DOM para ir a la siguiente fila visual REAL
+                const trActual = document.querySelector(`.fila-producto[data-id='${id}']`);
+                const trSiguiente = trActual.nextElementSibling;
+                
+                if (!trSiguiente) {
+                    agregarFila();
+                    const newRows = document.querySelectorAll('.fila-producto');
+                    const lastRow = newRows[newRows.length - 1];
+                    const nextId = lastRow.getAttribute('data-id');
+                    const nextInput = document.getElementById(`${colName}_${nextId}`);
+                    if (nextInput) {
+                        nextInput.focus();
+                        if(nextInput.select) nextInput.select();
+                    }
+                } else {
+                    const nextId = trSiguiente.getAttribute('data-id');
+                    const nextInput = document.getElementById(`${colName}_${nextId}`);
+                    if (nextInput) {
+                        nextInput.focus();
+                        if(nextInput.select) nextInput.select();
                     }
                 }
-
-                let margenNormal = 1.45;
-                let margenMayoreo = 1.25;
-                let precioVenta = costoUnitario * margenNormal;
-                let precioMayoreo = costoUnitario * margenMayoreo;
-
-                productosProcesados.push({
-                    'CODIGO': codigo,
-                    'CODEBAR': `*${codigo}*`,
-                    'NOMBRE': nombreFinal,
-                    'P COSTO': costoUnitario.toFixed(2),
-                    'P VENTA': `$${precioVenta.toFixed(2)}`,
-                    'P MAYOREO': precioMayoreo.toFixed(2),
-                    'DEPARTAMENTO': 'KIMAR',
-                    'INVENTARIO': 5,
-                    'IN MINIMO': 0
-                });
-            });
-
-            actualizarVistaPrevia();
-            document.getElementById('status').innerText = "Procesamiento completo. Arrastra las filas si necesitas reordenarlas.";
+            }
         }
 
-        // 4. Actualizar tabla HTML (ahora con ícono de arrastre)
-        function actualizarVistaPrevia() {
-            tbody.innerHTML = '';
-            productosProcesados.forEach((prod, index) => {
-                tbody.innerHTML += `<tr>
-                    <td class="drag-handle" title="Arrastrar para mover">☰</td>
-                    <td>${prod['CODIGO']}</td>
-                    <td>${prod['CODEBAR']}</td>
-                    <td>${prod['NOMBRE']}</td>
-                    <td>${prod['P COSTO']}</td>
-                    <td>${prod['P VENTA']}</td>
-                    <td>${prod['P MAYOREO']}</td>
-                    <td>${prod['DEPARTAMENTO']}</td>
-                    <td>${prod['INVENTARIO']}</td>
-                    <td>${prod['IN MINIMO']}</td>
-                </tr>`;
-            });
-        }
-
-        // 5. Función para limpiar la pantalla
-        function limpiarFormulario() {
-            document.getElementById('invoiceImage').value = '';
-            productosProcesados = [];
-            actualizarVistaPrevia();
-            document.getElementById('status').innerText = "Formulario limpio. Esperando nueva factura...";
-        }
-
-        // 6. Exportar Excel
-        function exportarExcel() {
-            if (productosProcesados.length === 0) return alert("No hay datos para exportar.");
-            const ordenColumnas = ["CODIGO", "CODEBAR", "NOMBRE", "P COSTO", "P VENTA", "P MAYOREO", "DEPARTAMENTO", "INVENTARIO", "IN MINIMO"];
+        function buscarEnDb(id) {
+            const inputCodigo = document.getElementById(`codigo_${id}`);
+            const codigo = inputCodigo.value.trim();
             
-            // Los datos se exportarán en el orden actual del array (el cual se modifica al arrastrar)
-            const hoja = XLSX.utils.json_to_sheet(productosProcesados, { header: ordenColumnas });
-            const libro = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(libro, hoja, "PRODUCTOS");
+            const divRefDesc = document.getElementById(`ref_desc_${id}`);
+            const divRefCosto = document.getElementById(`ref_costo_${id}`);
+            const divRefPrecio = document.getElementById(`ref_precio_${id}`);
             
-            XLSX.writeFile(libro, "IMPORTAR PRODUCTOS.xls");
+            if (!codigo) {
+                divRefDesc.innerText = "";
+                divRefCosto.innerText = "";
+                divRefPrecio.innerText = "";
+                return;
+            }
+
+            const productoEncontrado = baseDeDatos.find(p => p.codigo === codigo || p.codigo === codigo.replace(/^0+/, ''));
+
+            if (productoEncontrado) {
+                document.getElementById(`desc_${id}`).value = productoEncontrado.descripcion;
+                
+                divRefDesc.innerText = `Prov: ${productoEncontrado.departamento || '-'} | DB: ${productoEncontrado.descripcion}`;
+                divRefDesc.className = "text-xs text-gray-500 mt-1 h-4 italic truncate block font-medium";
+                
+                divRefCosto.innerText = `Ant: $${productoEncontrado.costo.toFixed(2)}`;
+                divRefCosto.className = "text-xs text-gray-500 mt-1 h-4 italic truncate block";
+                
+                divRefPrecio.innerText = `Ant: $${productoEncontrado.precio.toFixed(2)}`;
+                divRefPrecio.className = "text-xs text-gray-500 mt-1 h-4 italic truncate block";
+                
+                inputCodigo.parentElement.classList.add('flash-green');
+                setTimeout(() => inputCodigo.parentElement.classList.remove('flash-green'), 1000);
+            } else {
+                divRefDesc.innerText = "No encontrado en DB";
+                divRefDesc.className = "text-xs text-red-400 mt-1 h-4 italic truncate block";
+                divRefCosto.innerText = "";
+                divRefPrecio.innerText = "";
+            }
         }
 
-        // 7. Exportar CSV
-        function exportarCSV() {
-            if (productosProcesados.length === 0) return alert("No hay datos para exportar.");
-            const ordenColumnas = ["CODIGO", "CODEBAR", "NOMBRE", "P COSTO", "P VENTA", "P MAYOREO", "DEPARTAMENTO", "INVENTARIO", "IN MINIMO"];
-            const hoja = XLSX.utils.json_to_sheet(productosProcesados, { header: ordenColumnas });
-            const csv = XLSX.utils.sheet_to_csv(hoja);
+        function agregarFila(codigo = '', descripcion = '', cantidad = '', importe = '', margen = 40) {
+            filaCount++;
+            const id = filaCount;
             
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            const url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
-            link.setAttribute("download", "IMPORTAR PRODUCTOS.csv");
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            const tr = document.createElement('tr');
+            tr.className = 'fila-producto bg-white transition border-b border-gray-200';
+            tr.setAttribute('data-id', id);
+            
+            // Habilitar Drag & Drop en la fila
+            tr.setAttribute('draggable', 'true');
+            tr.addEventListener('dragstart', handleDragStart);
+            tr.addEventListener('dragover', handleDragOver);
+            tr.addEventListener('dragenter', handleDragEnter);
+            tr.addEventListener('dragleave', handleDragLeave);
+            tr.addEventListener('drop', handleDrop);
+            tr.addEventListener('dragend', handleDragEnd);
+            
+            tr.innerHTML = `
+                <td class="px-1 py-3 align-top text-center text-gray-400 cursor-grab hover:text-gray-700" title="Arrastrar para reordenar">
+                    <div class="mt-2 text-xl font-bold">↕</div>
+                </td>
+                <td class="px-2 py-3 align-top">
+                    <input type="text" id="codigo_${id}" value="${codigo}" placeholder="Escanear..." 
+                        onmousedown="preventDragOnInput(event)"
+                        onkeydown="manejarTeclas(event, ${id}, 'codigo')" onblur="buscarEnDb(${id})"
+                        class="w-32 p-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono text-sm bg-gray-50">
+                    <div class="h-4 mt-1"></div>
+                </td>
+                <td class="px-2 py-3 align-top">
+                    <input type="text" id="desc_${id}" value="${descripcion}" placeholder="Nombre del producto" 
+                        onmousedown="preventDragOnInput(event)"
+                        onkeydown="manejarTeclas(event, ${id}, 'desc')"
+                        class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500 font-semibold text-gray-700">
+                    <div id="ref_desc_${id}" class="text-xs text-gray-400 mt-1 h-4 italic truncate block"></div>
+                </td>
+                <td class="px-2 py-3 align-top">
+                    <input type="number" id="cant_${id}" value="${cantidad}" 
+                        onmousedown="preventDragOnInput(event)"
+                        oninput="recalcularFila(${id})" onkeydown="manejarTeclas(event, ${id}, 'cant')"
+                        class="w-20 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500 text-gray-700">
+                </td>
+                <td class="px-2 py-3 align-top">
+                    <input type="number" id="imp_${id}" value="${importe}" 
+                        onmousedown="preventDragOnInput(event)"
+                        oninput="recalcularSumaNeto()" onkeydown="manejarTeclas(event, ${id}, 'imp')"
+                        class="input-importe w-28 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500 font-semibold text-blue-900 bg-blue-50">
+                </td>
+                <td class="px-2 py-3 align-top bg-blue-50 text-right rounded-md border-r-2 border-white">
+                    <div id="costo_${id}" class="font-bold text-blue-700 text-lg">$0.00</div>
+                    <div id="ref_costo_${id}" class="text-xs text-gray-400 mt-1 h-4 italic truncate"></div>
+                </td>
+                <td class="px-2 py-3 align-top">
+                    <div class="flex items-center justify-end">
+                        <input type="number" id="margen_${id}" value="${margen}" 
+                            onmousedown="preventDragOnInput(event)"
+                            oninput="recalcularFila(${id})" onkeydown="manejarTeclas(event, ${id}, 'margen')"
+                            class="w-16 p-2 border border-gray-300 rounded text-right focus:outline-none focus:border-blue-500 font-semibold text-gray-700">
+                        <span class="ml-1 text-gray-500 font-bold">%</span>
+                    </div>
+                </td>
+                <td class="px-2 py-3 align-top bg-green-100 text-right rounded-md">
+                    <div id="precio_${id}" class="font-bold text-green-700 text-xl">$0.00</div>
+                    <div id="ref_precio_${id}" class="text-xs text-gray-500 mt-1 h-4 italic truncate"></div>
+                </td>
+                <td class="px-2 py-3 align-top text-center">
+                    <button onclick="this.closest('tr').remove(); recalcularSumaNeto();" class="text-red-400 hover:text-red-700 font-bold text-2xl px-2">&times;</button>
+                </td>
+            `;
+            
+            document.getElementById('tablaProductos').appendChild(tr);
+            recalcularFila(id);
         }
+
+        document.getElementById('facturaTotal').addEventListener('input', actualizarCoeficiente);
+        
+        inicializarBaseDatos();
+        agregarFila();
     </script>
 </body>
 </html>
